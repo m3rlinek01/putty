@@ -1,0 +1,12 @@
+{
+  "upstream": "PuTTY",
+  "version": "0.85",
+  "source_url": "https://the.earth.li/~sgtatham/putty/0.85/putty-src.zip",
+  "source_sha256": "232c5c286a5b35f445dbbf49e159469acde372a3907aef738d88e28b4b0f6da2",
+  "checksums_url": "https://the.earth.li/~sgtatham/putty/0.85/sha256sums",
+  "port_date": "2026-10-18",
+  "target": "Windows x64",
+  "compiler": "LLVM-MinGW Clang22.1.8",
+  "language": "C++20 with Clang C99 initializer extensions",
+  "license": "LICENCE"
+}

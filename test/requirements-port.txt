@@ -1,0 +1,2 @@
+# Optional local SSH/SFTP integration test. Crypto tests use the Python standard library.
+paramiko==5.0.0
