@@ -10,6 +10,7 @@ import ctypes
 import os
 from pathlib import Path
 import re
+import struct
 import subprocess
 import tempfile
 import zipfile
@@ -17,6 +18,7 @@ import zipfile
 parser = argparse.ArgumentParser()
 parser.add_argument("archive", type=Path)
 parser.add_argument("--readobj", required=True, type=Path)
+parser.add_argument("--architecture", choices=("x64", "x86"), default="x64")
 args = parser.parse_args()
 if os.name != "nt":
     raise SystemExit("This packaging check requires Windows")
@@ -40,6 +42,11 @@ try:
         assert not list(directory.glob("*.dll")), "Static package unexpectedly contains DLLs"
         for name in programs:
             exe = directory / (name + ".exe")
+            data = exe.read_bytes()
+            pe_offset = struct.unpack_from("<I", data, 0x3c)[0]
+            assert data[pe_offset:pe_offset + 4] == b"PE\0\0", name
+            machine = struct.unpack_from("<H", data, pe_offset + 4)[0]
+            assert machine == {"x64": 0x8664, "x86": 0x14c}[args.architecture], (name, machine)
             result = subprocess.run([str(args.readobj), "--coff-imports", str(exe)],
                                     check=True, capture_output=True, text=True)
             imports = re.findall(r"^\s+Name: (\S+)", result.stdout, re.MULTILINE)

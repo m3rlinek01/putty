@@ -1,4 +1,4 @@
-# PuTTY 0.85 — port C++ dla Windows x64
+# PuTTY 0.85 — port C++ dla Windows x64 i x86
 
 Kompletny pakiet aplikacji PuTTY, przygotowany z oficjalnych źródeł wydania 0.85.
 Kod aplikacji kompiluje się jako C++20 przy użyciu LLVM-MinGW Clang. Zachowano
@@ -7,6 +7,11 @@ Jest to nieoficjalna kompilacja lokalna; zainstalowany PuTTY pozostał bez zmian
 Modyfikacje portu C++ i rozszerzenia Windows: **m3rlinek**.
 
 ## Start na drugim komputerze
+
+Gotowe [wydania](https://github.com/m3rlinek01/putty/releases/latest) zawierają
+instalator EXE i paczkę portable ZIP osobno dla x64 oraz x86.
+Instalator działa na koncie użytkownika, dodaje skróty i deinstalator.
+Portable wystarczy rozpakować i uruchomić `putty.exe`.
 
 Zacznij od [instrukcji instalacji](docs/GETTING-STARTED.md).
 Dokumentacja: [rozwój projektu](docs/DEVELOPMENT.md), [mapa kodu](docs/ARCHITECTURE.md)
@@ -43,7 +48,7 @@ cyfrowego wydawcy oficjalnego PuTTY.
 Biblioteki kompilatora C++ są wbudowane statycznie: instalowanie `libc++.dll`,
 `libunwind.dll` ani środowiska deweloperskiego nie jest potrzebne. Paczkę
 sprawdzono po rozpakowaniu z PATH ograniczonym do Windows System32.
-Wymagany jest Windows 10/11 x64. Licencja wbudowanych bibliotek LLVM:
+Wymagany jest Windows 10/11 x64 lub Windows 10 x86. Licencja wbudowanych bibliotek LLVM:
 `THIRD-PARTY-LLVM-LICENSE.txt`.
 
 ## Budowanie
@@ -56,6 +61,12 @@ Z katalogu tego projektu:
 ```powershell
 .\build-cpp.ps1
 ```
+
+Wariant 32-bitowy: `.\build-cpp.ps1 -Architecture x86 -Test`.
+Powstaje w `build-x86/`, a gotowe pliki trafiają do `dist/x86/`.
+Oba warianty wykorzystują ten sam pakiet LLVM-MinGW z kompilatorami docelowymi
+`x86_64-w64-mingw32-clang++` i `i686-w64-mingw32-clang++`.
+Budowanie instalatorów i paczek opisuje [instrukcja pakowania](docs/PACKAGING.md).
 
 Programy zostaną zbudowane w `build/` i skopiowane do `dist/`.
 Kompilacja korzysta z rozszerzeń Clang odziedziczonych po kodzie C99, m.in.

@@ -1,15 +1,18 @@
+# Author: m3rlinek.
 param(
+    [ValidateSet('x64', 'x86')][string]$Architecture = 'x64',
     [switch]$Test,
     [int]$Jobs = 8,
     [string]$PythonExecutable = '',
     [string]$DistDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
-$compiler = (Get-Command clang++ -ErrorAction Stop).Source
-$cCompiler = (Get-Command clang -ErrorAction Stop).Source
+$target = if ($Architecture -eq 'x86') { 'i686' } else { 'x86_64' }
+$compiler = (Get-Command "$target-w64-mingw32-clang++" -ErrorAction Stop).Source
+$cCompiler = (Get-Command "$target-w64-mingw32-clang" -ErrorAction Stop).Source
 $make = (Get-Command mingw32-make -ErrorAction Stop).Source
 $cmake = (Get-Command cmake -ErrorAction Stop).Source
-$build = Join-Path $PSScriptRoot 'build'
+$build = Join-Path $PSScriptRoot $(if ($Architecture -eq 'x64') { 'build' } else { 'build-x86' })
 $configure = @('-S', $PSScriptRoot, '-B', $build, '-G', 'MinGW Makefiles',
     "-DCMAKE_C_COMPILER=$cCompiler", "-DCMAKE_CXX_COMPILER=$compiler",
     "-DCMAKE_MAKE_PROGRAM=$make", '-DCMAKE_BUILD_TYPE=Release',
@@ -32,7 +35,7 @@ if ($Test) {
     & (Get-Command ctest -ErrorAction Stop).Source --test-dir $build --output-on-failure
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-$dist = if ($DistDirectory) { $DistDirectory } else { Join-Path $PSScriptRoot 'dist' }
+$dist = if ($DistDirectory) { $DistDirectory } else { Join-Path $PSScriptRoot $(if ($Architecture -eq 'x64') { 'dist' } else { 'dist/x86' }) }
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 $readobj = Join-Path (Split-Path $compiler -Parent) 'llvm-readobj.exe'
 foreach ($program in 'putty','puttytel','plink','pscp','psftp','puttygen','pageant','pterm','psocks') {
