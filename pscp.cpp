@@ -1,3 +1,4 @@
+/* Windows extensions: m3rlinek. */
 /*
  * pscp.cpp  -  Scp (Secure Copy) client for PuTTY.
  * Joris van Rantwijk, Simon Tatham
@@ -40,6 +41,15 @@ static bool main_cmd_is_sftp = false;
 static bool fallback_cmd_is_sftp = false;
 static bool using_sftp = false;
 static bool uploading = false;
+static bool private_transfer = false;
+#ifdef _WIN32
+extern bool pscp_utf8_paths;
+#endif
+
+static const char *transfer_arg(CmdlineArg *arg)
+{
+    return private_transfer ? cmdline_arg_to_utf8(arg) : cmdline_arg_to_str(arg);
+}
 
 static Backend *backend;
 static Conf *conf;
@@ -346,6 +356,14 @@ static void do_cmd(char *host, char *user, char *cmd)
      */
     cmdline_run_saved(conf);
 
+    if (*conf_get_str(conf, CONF_ssh_share_id)) {
+        /* Reuse only this window's authenticated transport, without fallback. */
+        conf_set_bool(conf, CONF_ssh_connection_sharing, true);
+        conf_set_bool(conf, CONF_ssh_connection_sharing_upstream, false);
+        conf_set_bool(conf, CONF_ssh_connection_sharing_downstream, true);
+        conf_set_bool(conf, CONF_ssh_share_required, true);
+    }
+
     /*
      * Muck about with the hostname in various ways.
      */
@@ -492,6 +510,20 @@ static void do_cmd(char *host, char *user, char *cmd)
 static void print_stats(const char *name, uint64_t size, uint64_t done,
                         time_t start, time_t now)
 {
+    if (private_transfer) {
+        /* Private GUI protocol: exact bytes, no locale or terminal CR output.
+         * Hex filenames keep tabs/newlines and Unicode unambiguous. */
+        double elapsed = difftime(now, start);
+        uint64_t rate = static_cast<uint64_t>(done / (elapsed > 0 ? elapsed : 1));
+        uint64_t eta = rate && done < size ? (size - done) / rate : 0;
+        printf("PUTTY-PROGRESS\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t%" PRIu64 "\t",
+               size, done, rate, eta);
+        for (const unsigned char *p = reinterpret_cast<const unsigned char *>(name); *p; p++)
+            printf("%02x", *p);
+        putchar('\n');
+        fflush(stdout);
+        return;
+    }
     float ratebs;
     unsigned long eta;
     char *etastr;
@@ -1614,6 +1646,12 @@ static void source(const char *src)
     attr = file_type(src);
     if (attr == FILE_TYPE_NONEXISTENT ||
         attr == FILE_TYPE_WEIRD) {
+#ifdef _WIN32
+        if (private_transfer && attr == FILE_TYPE_WEIRD) {
+            run_err("%s: symbolic links and directory junctions are not transferred", src);
+            return;
+        }
+#endif
         run_err("%s: %s file or directory", src,
                 (attr == FILE_TYPE_WEIRD ? "Not a" : "No such"));
         return;
@@ -1985,7 +2023,7 @@ static void toremote(CmdlineArg **args, size_t nargs)
 
     uploading = true;
 
-    wtarg = dupstr(cmdline_arg_to_str(args[nargs - 1]));
+    wtarg = dupstr(transfer_arg(args[nargs - 1]));
 
     /* Separate host from filename */
     host = wtarg;
@@ -2012,7 +2050,7 @@ static void toremote(CmdlineArg **args, size_t nargs)
     }
 
     if (nargs == 2) {
-        const char *arg0 = cmdline_arg_to_str(args[0]);
+        const char *arg0 = transfer_arg(args[0]);
         if (colon(arg0) != NULL)
             bump("%s: Remote to remote not supported", arg0);
 
@@ -2035,7 +2073,7 @@ static void toremote(CmdlineArg **args, size_t nargs)
         return;
 
     for (size_t i = 0; i < nargs - 1; i++) {
-        src = cmdline_arg_to_str(args[i]);
+        src = transfer_arg(args[i]);
         if (colon(src) != NULL) {
             tell_user(stderr, "%s: Remote to remote not supported\n", src);
             errs++;
@@ -2083,8 +2121,8 @@ static void tolocal(CmdlineArg **args, size_t nargs)
     if (nargs != 2)
         bump("More than one remote source not supported");
 
-    wsrc = wsrc_orig = dupstr(cmdline_arg_to_str(args[0]));
-    targ = cmdline_arg_to_str(args[1]);
+    wsrc = wsrc_orig = dupstr(transfer_arg(args[0]));
+    targ = transfer_arg(args[1]);
 
     /* Separate host from filename */
     host = wsrc;
@@ -2291,6 +2329,12 @@ int psftp_main(CmdlineArgList *arglist)
             arglistpos--; /* logically push that argument back on the list */
             break;
         }
+        if (!strcmp(argstr, "-share-id")) {
+            private_transfer = true;
+#ifdef _WIN32
+            pscp_utf8_paths = true;
+#endif
+        }
         int ret = cmdline_process_param(arg, nextarg, 1, conf);
         if (ret == -2) {
             cmdline_error("option \"%s\" requires an argument", argstr);
@@ -2330,13 +2374,17 @@ int psftp_main(CmdlineArgList *arglist)
         } else if (strcmp(argstr, "-no-sanitise-stderr") == 0) {
             sanitise_stderr = false;
         } else if (strcmp(argstr, "--") == 0) {
-            arglistpos++;
             break;
         } else {
             cmdline_error("unknown option \"%s\"", argstr);
         }
     }
     backend = NULL;
+
+    if (private_transfer) {
+        try_sftp = true;
+        try_scp = false;
+    }
 
     stdio_sink_init(&stderr_ss, stderr);
     stderr_bs = BinarySink_UPCAST(&stderr_ss);

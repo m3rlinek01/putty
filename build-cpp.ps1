@@ -1,7 +1,8 @@
 param(
     [switch]$Test,
     [int]$Jobs = 8,
-    [string]$PythonExecutable = ''
+    [string]$PythonExecutable = '',
+    [string]$DistDirectory = ''
 )
 $ErrorActionPreference = 'Stop'
 $compiler = (Get-Command clang++ -ErrorAction Stop).Source
@@ -31,10 +32,21 @@ if ($Test) {
     & (Get-Command ctest -ErrorAction Stop).Source --test-dir $build --output-on-failure
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-$dist = Join-Path $PSScriptRoot 'dist'
+$dist = if ($DistDirectory) { $DistDirectory } else { Join-Path $PSScriptRoot 'dist' }
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
+$readobj = Join-Path (Split-Path $compiler -Parent) 'llvm-readobj.exe'
 foreach ($program in 'putty','puttytel','plink','pscp','psftp','puttygen','pageant','pterm','psocks') {
-    Copy-Item -LiteralPath (Join-Path $build "$program.exe") -Destination $dist
+    $executable = Join-Path $build "$program.exe"
+    $imports = & $readobj --coff-imports $executable
+    if ($LASTEXITCODE -ne 0) { throw "Cannot inspect imports of $program.exe" }
+    if ($imports -match '(?i)Name: (libc\+\+|libunwind|libwinpthread|libgcc[^\s]*|libstdc\+\+)[^\s]*\.dll') {
+        throw "$program.exe requires a toolchain runtime DLL; portable packaging refused."
+    }
+    Copy-Item -LiteralPath $executable -Destination $dist
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENCE') -Destination $dist
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'THIRD-PARTY-LLVM-LICENSE.txt') -Destination $dist
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'contrib\putty-transfer.sh') -Destination $dist
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs\FILE-TRANSFER.md') -Destination $dist
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'docs\DUPLICATE-SESSION.md') -Destination $dist
 Write-Host "Ready: $dist"

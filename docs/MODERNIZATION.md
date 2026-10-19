@@ -5,7 +5,7 @@ Priorytetem jest zachowanie działania i małe, przeglądalne kroki.
 
 ## 0. Odtworzenie baseline
 
-Uruchomić `build-cpp.ps1 -Test`, potwierdzić 12/12 zestawów i zapisać toolchain.
+Uruchomić `build-cpp.ps1 -Test`, potwierdzić 13/13 zestawów i zapisać toolchain.
 Rozróżnić ostrzeżenia istniejące przed zmianą od nowych. Przy zmianie kompilatora
 porównać osobno wyniki starego i nowego środowiska.
 
@@ -14,7 +14,7 @@ porównać osobno wyniki starego i nowego środowiska.
 Dobry pierwszy etap: jeden moduł `utils/` z czytelnym kontraktem i testami.
 Poprawić const correctness, usunąć niepotrzebne powtórzenia castów i nadać
 konwersjom jawny sens. Nie rozszerzać tego automatycznie na całe drzewo.
-Akceptacja: kompilacja, odpowiedni test modułu i pełne 12 zestawów bez regresji.
+Akceptacja: kompilacja, odpowiedni test modułu i pełne 13 zestawów bez regresji.
 
 ## 2. Ograniczanie rozszerzeń C99
 

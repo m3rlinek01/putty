@@ -52,6 +52,7 @@ py -3.13 -m venv .venv
 
 Jeśli masz już działające logowanie GitHub, krok `gh auth login` można pominąć.
 Jeśli `py` nie jest dostępny, użyj pełnej ścieżki do zainstalowanego Pythona 3.
+Projekt buduje się samodzielnie z dołączonych źródeł.
 
 Skrypt wybiera `.venv\Scripts\python.exe` z katalogu projektu. Możesz wskazać
 inny interpreter przez `-PythonExecutable C:\sciezka\python.exe`.
@@ -64,16 +65,16 @@ ctest --test-dir build --output-on-failure
 .\dist\plink.exe -V
 ```
 
-Oczekiwany wynik: **12 testów CTest i 12/12 PASS**. Zestaw `crypto` zawiera
-90 testów kryptograficznych, a `local_ssh_sftp` pięć kontroli klientów.
+Oczekiwany wynik: **13 testów CTest i 13/13 PASS**. Zestaw `crypto` zawiera
+90 testów kryptograficznych, a `local_ssh_sftp` 13 kontroli klientów.
 
 Programy EXE znajdziesz w `dist/`. Główny klient to `dist\putty.exe`.
 Oryginalna aplikacja zainstalowana w systemie jest niezależna od tego katalogu.
 
 ## Typowe problemy
 
-- **10 zamiast 12 testów:** CMake nie znalazł Pythona.
-- **11 zamiast 12:** wybrany Python nie ma Paramiko. Zainstaluj wymagania
+- **11 zamiast 13 testów:** CMake nie znalazł Pythona.
+- **12 zamiast 13:** wybrany Python nie ma Paramiko. Zainstaluj wymagania
   wskazanym interpreterem i ponownie uruchom `build-cpp.ps1 -Test`.
 - **Wybrany niewłaściwy Clang:** sprawdź `Get-Command clang, clang++, mingw32-make`.
   Wszystkie powinny pochodzić z LLVM-MinGW. Umieść jego `bin` na początku PATH.

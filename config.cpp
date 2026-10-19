@@ -157,6 +157,20 @@ void conf_editbox_handler(dlgcontrol *ctrl, dlgparam *dlg,
     }
 }
 
+/* This new setting has an explicitly UTF-8 string storage contract. */
+static void file_transfer_directory_handler(dlgcontrol *ctrl, dlgparam *dlg,
+                                            void *data, int event)
+{
+    Conf *conf = static_cast<Conf *>(data);
+    if (event == EVENT_REFRESH)
+        dlg_editbox_set_utf8(ctrl, dlg, conf_get_str(conf, CONF_ssh_download_directory));
+    else if (event == EVENT_VALCHANGE) {
+        char *value = dlg_editbox_get_utf8(ctrl, dlg);
+        conf_set_str(conf, CONF_ssh_download_directory, value);
+        sfree(value);
+    }
+}
+
 void conf_filesel_handler(dlgcontrol *ctrl, dlgparam *dlg,
                           void *data, int event)
 {
@@ -2677,6 +2691,19 @@ void setup_config_box(struct controlbox *b, bool midsession,
         ctrl_settitle(b, "Connection/SSH",
                       "Options controlling SSH connections");
 
+        ctrl_settitle(b, "Connection/SSH/Files", "File transfers with the Windows SSH shell");
+        s = ctrl_getset(b, "Connection/SSH/Files", "transfer", "Explorer and shell integration");
+        if (!midsession)
+            ctrl_checkbox(s, "Enable file transfers using a private shared SSH connection", NO_SHORTCUT,
+                          HELPCTX(no_help), conf_checkbox_handler, I(CONF_ssh_file_transfer));
+        if (!midsession)
+            ctrl_checkbox(s, "Prepare Bash automatically (no files installed on the server)", NO_SHORTCUT,
+                          HELPCTX(no_help), conf_checkbox_handler, I(CONF_ssh_file_transfer_auto));
+        ctrl_text(s, "Bash sessions are ready automatically after login. Drop files at the shell prompt or use cp file $win to download. Other shells require manual integration.", HELPCTX(no_help));
+        ctrl_editbox(s, "Local download folder (blank = Windows Downloads):", NO_SHORTCUT, 100,
+                     HELPCTX(no_help), file_transfer_directory_handler, I(CONF_ssh_download_directory), ED_STR);
+        ctrl_text(s, "Enter an existing absolute Windows path. Transfers use the original SSH login, outside sudo or nested SSH. Enabling transfers reserves sharing for this window; reconnect after changing it.", HELPCTX(no_help));
+
         /* SSH-1 or connection-sharing downstream */
         if (midsession && (protcfginfo == 1 || protcfginfo == -1)) {
             s = ctrl_getset(b, "Connection/SSH", "disclaimer", NULL);
@@ -2711,6 +2738,9 @@ void setup_config_box(struct controlbox *b, bool midsession,
 
         if (!midsession) {
             s = ctrl_getset(b, "Connection/SSH", "sharing", "Sharing an SSH connection between PuTTY tools");
+
+            ctrl_checkbox(s, "Duplicate logged-in sessions without authenticating again", NO_SHORTCUT,
+                          HELPCTX(ssh_share), conf_checkbox_handler, I(CONF_ssh_duplicate_session));
 
             ctrl_checkbox(s, "Share SSH connections if possible", 's',
                           HELPCTX(ssh_share),

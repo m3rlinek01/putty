@@ -32,6 +32,8 @@ typedef struct Mock {
     Conf *conf;
     struct unicode_data ucsdata[1];
     strbuf *title;
+    strbuf *transfer;
+    unsigned transfer_requests;
 
     strbuf *context;
 
@@ -53,6 +55,13 @@ static void mock_palette_set(TermWin *win, unsigned start, unsigned ncolours,
 static void mock_palette_get_overrides(TermWin *tw, Terminal *term) {}
 static void mock_set_title(TermWin *win, const char *title, int codepage);
 static void mock_set_icon_title(TermWin *win, const char *title, int cp) {}
+static void mock_file_transfer(TermWin *win, const char *payload)
+{
+    Mock *mk = container_of(win, Mock, tw);
+    strbuf_clear(mk->transfer);
+    put_dataz(mk->transfer, payload);
+    mk->transfer_requests++;
+}
 
 static const TermWinVtable mock_termwin_vt = {
     .setup_draw_ctx = mock_setup_draw_ctx,
@@ -64,6 +73,7 @@ static const TermWinVtable mock_termwin_vt = {
     .set_raw_mouse_mode_pointer = mock_set_raw_mouse_mode_pointer,
     .palette_set = mock_palette_set,
     .palette_get_overrides = mock_palette_get_overrides,
+    .file_transfer = mock_file_transfer,
 };
 
 static Mock *mock_new(void)
@@ -79,6 +89,7 @@ static Mock *mock_new(void)
 
     mk->context = strbuf_new();
     mk->title = strbuf_new();
+    mk->transfer = strbuf_new();
 
     mk->tw.vt = &mock_termwin_vt;
 
@@ -91,6 +102,7 @@ static void mock_free(Mock *mk)
     conf_free(mk->conf);
     term_free(mk->term);
     strbuf_free(mk->title);
+    strbuf_free(mk->transfer);
     sfree(mk);
 }
 
@@ -108,6 +120,8 @@ static void reset(Mock *mk)
     term_set_trust_status(mk->term, false);
     strbuf_clear(mk->context);
     strbuf_clear(mk->title);
+    strbuf_clear(mk->transfer);
+    mk->transfer_requests = 0;
 }
 
 #if 0
@@ -524,6 +538,52 @@ static void test_wintitle(Mock *mk)
     SEQUAL(mk->title->s, "bar");
 }
 
+static void test_file_transfer(Mock *mk)
+{
+    reset(mk);
+    term_datapl(mk->term, PTRLEN_LITERAL(
+        "\033]777;putty-transfer;cwd;2f746d70\007"));
+    IEQUAL(mk->transfer_requests, 1);
+    SEQUAL(mk->transfer->s, "putty-transfer;cwd;2f746d70");
+
+    /* Segmented network delivery and the ST terminator. */
+    term_datapl(mk->term, PTRLEN_LITERAL("\033]777;putty-transfer;down"));
+    IEQUAL(mk->transfer_requests, 1);
+    term_datapl(mk->term, PTRLEN_LITERAL("load;2f612e7a6970\033"));
+    IEQUAL(mk->transfer_requests, 1);
+    term_datapl(mk->term, PTRLEN_LITERAL("\\"));
+    IEQUAL(mk->transfer_requests, 2);
+    SEQUAL(mk->transfer->s, "putty-transfer;download;2f612e7a6970");
+
+    /* NUL must not turn a malformed string into an executable prefix. */
+    term_datapl(mk->term, PTRLEN_LITERAL(
+        "\033]777;putty-transfer;cwd;2f00\0trailing\007"));
+    IEQUAL(mk->transfer_requests, 2);
+
+    /* A request longer than the fixed OSC buffer must be ignored entirely. */
+    term_datapl(mk->term, PTRLEN_LITERAL("\033]777;"));
+    for (unsigned i = 0; i <= OSC_STR_MAX; i++)
+        term_datapl(mk->term, PTRLEN_LITERAL("a"));
+    term_datapl(mk->term, PTRLEN_LITERAL("\007"));
+    IEQUAL(mk->transfer_requests, 2);
+
+    /* A later well-formed request is unaffected by earlier overflow. */
+    term_datapl(mk->term, PTRLEN_LITERAL("\033]777;putty-transfer;cwd;2f\007"));
+    IEQUAL(mk->transfer_requests, 3);
+
+    /* CR/LF abort requests rather than submitting a partial path. */
+    term_datapl(mk->term, PTRLEN_LITERAL("\033]777;putty-transfer;cwd;2f\n"));
+    IEQUAL(mk->transfer_requests, 3);
+
+    /* Non-Windows frontends can leave the callback absent. */
+    TermWinVtable without_callback = mock_termwin_vt;
+    without_callback.file_transfer = NULL;
+    mk->tw.vt = &without_callback;
+    term_datapl(mk->term, PTRLEN_LITERAL("\033]777;putty-transfer;cwd;2f\007"));
+    IEQUAL(mk->transfer_requests, 3);
+    mk->tw.vt = &mock_termwin_vt;
+}
+
 int main(void)
 {
     Mock *mk = mock_new();
@@ -533,6 +593,7 @@ int main(void)
     test_wrap(mk);
     test_nonwrap(mk);
     test_wintitle(mk);
+    test_file_transfer(mk);
 
     bool failed = mk->any_test_failed;
     mock_free(mk);

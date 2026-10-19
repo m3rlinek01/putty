@@ -2,6 +2,7 @@
 
 #include "putty.h"
 #include "storage.h"
+#include "../windows/session-sharing.h"
 
 void modalfatalbox(const char *p, ...)
 {
@@ -1044,9 +1045,74 @@ void test_conf_key_info(void)
     }
 }
 
+static void test_duplicate_sharing()
+{
+    Conf *source = conf_new();
+    do_defaults(NULL, source);
+    conf_set_int(source, CONF_protocol, PROT_SSH);
+    gui_prepare_session_sharing(source, "original-window");
+    assert(!strcmp(conf_get_str(source, CONF_ssh_share_id), "original-window"));
+    assert(!conf_get_bool(source, CONF_ssh_share_required));
+
+    Conf *copy = gui_duplicate_session_conf(source, true);
+    assert(conf_get_bool(copy, CONF_ssh_share_required));
+    assert(conf_get_bool(copy, CONF_ssh_connection_sharing_downstream));
+    assert(!conf_get_bool(copy, CONF_ssh_connection_sharing_upstream));
+    assert(!conf_get_bool(source, CONF_ssh_share_required));
+
+    /* Exercise the actual inherited file-mapping wire representation. */
+    strbuf *serial = strbuf_new();
+    conf_serialise(BinarySink_UPCAST(serial), copy);
+    BinarySource src[1];
+    BinarySource_BARE_INIT(src, serial->s, serial->len);
+    Conf *received = conf_new();
+    assert(conf_deserialise(received, src));
+    gui_prepare_session_sharing(received, "must-not-replace-original");
+    assert(!strcmp(conf_get_str(received, CONF_ssh_share_id), "original-window"));
+    assert(conf_get_bool(received, CONF_ssh_share_required));
+    assert(!conf_get_bool(received, CONF_ssh_connection_sharing_upstream));
+    Conf *nested = gui_duplicate_session_conf(received, true);
+    gui_prepare_session_sharing(nested, "must-not-create-third-transport");
+    assert(!strcmp(conf_get_str(nested, CONF_ssh_share_id), "original-window"));
+    conf_free(nested);
+    conf_free(received);
+    strbuf_free(serial);
+    conf_free(copy);
+
+    copy = gui_duplicate_session_conf(source, false);
+    assert(!*conf_get_str(copy, CONF_ssh_share_id));
+    assert(!conf_get_bool(copy, CONF_ssh_share_required));
+    gui_prepare_session_sharing(copy, "independent-window");
+    assert(!strcmp(conf_get_str(copy, CONF_ssh_share_id), "independent-window"));
+    conf_free(copy);
+
+    /* Reuse is available with file transfers disabled, and can be opted out. */
+    conf_set_bool(source, CONF_ssh_file_transfer, false);
+    gui_prepare_session_sharing(source, "no-transfer-window");
+    copy = gui_duplicate_session_conf(source, true);
+    gui_prepare_session_sharing(copy, "ignored");
+    assert(!strcmp(conf_get_str(copy, CONF_ssh_share_id), "no-transfer-window"));
+    conf_free(copy);
+    conf_set_bool(source, CONF_ssh_duplicate_session, false);
+    copy = gui_duplicate_session_conf(source, true);
+    assert(!*conf_get_str(copy, CONF_ssh_share_id));
+    assert(!conf_get_bool(copy, CONF_ssh_share_required));
+    gui_prepare_session_sharing(copy, "unused");
+    assert(!*conf_get_str(copy, CONF_ssh_share_id));
+    conf_free(copy);
+    conf_set_bool(source, CONF_ssh_duplicate_session, true);
+    conf_set_int(source, CONF_protocol, PROT_TELNET);
+    copy = gui_duplicate_session_conf(source, true);
+    assert(!conf_get_bool(copy, CONF_ssh_share_required));
+    assert(!*conf_get_str(copy, CONF_ssh_share_id));
+    conf_free(copy);
+    conf_free(source);
+}
+
 int main(void)
 {
     test_conf_key_info();
     test_simple();
+    test_duplicate_sharing();
     return nfails != 0;
 }

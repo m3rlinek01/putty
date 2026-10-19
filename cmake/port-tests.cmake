@@ -6,6 +6,11 @@ foreach(name host_strfoo decode_utf8 tree234 wildcard cert_expr conf bpp
   set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endforeach()
 
+if(TARGET test_file_transfer)
+  add_test(NAME file_transfer COMMAND $<TARGET_FILE:test_file_transfer>)
+  set_tests_properties(file_transfer PROPERTIES TIMEOUT 60)
+endif()
+
 find_package(Python3 QUIET COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
   add_test(NAME crypto

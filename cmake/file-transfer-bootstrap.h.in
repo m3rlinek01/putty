@@ -1,0 +1,3 @@
+/* Author: m3rlinek. */
+/* Generated from the shell integration sources, embedded in the executable. */
+static const char putty_transfer_bootstrap[] = R"PUTTYSH(@PUTTY_TRANSFER_BOOTSTRAP@)PUTTYSH";

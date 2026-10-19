@@ -686,6 +686,17 @@ int cmdline_process_param(CmdlineArg *arg, CmdlineArg *nextarg,
         SAVEABLE(0);
         conf_set_bool(conf, CONF_ssh_connection_sharing, true);
     }
+    if (!strcmp(p, "-share-id")) {
+        RETURN(2);
+        UNAVAILABLE_IN(TOOLTYPE_NONNETWORK);
+        SAVEABLE(0);
+        /* Internal endpoint selector, also useful to integration tests. */
+        if (!*value || strlen(value) > 128 ||
+            value[strspn(value, "abcdefghijklmnopqrstuvwxyz"
+                         "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")])
+            cmdline_error("invalid private connection-sharing identifier");
+        conf_set_str(conf, CONF_ssh_share_id, value);
+    }
     if (!strcmp(p, "-noshare")) {
         RETURN(1);
         UNAVAILABLE_IN(TOOLTYPE_NONNETWORK);

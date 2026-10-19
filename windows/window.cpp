@@ -1,3 +1,4 @@
+/* Windows extensions: m3rlinek. */
 /*
  * window.cpp - the PuTTY(tel)/pterm main program, which runs a PuTTY
  * terminal emulator and backend in a window.
@@ -20,6 +21,8 @@
 #include "putty-rc.h"
 #include "security-api.h"
 #include "win-gui-seat.h"
+#include "file-transfer.h"
+#include "session-sharing.h"
 #include "tree234.h"
 
 #ifdef NO_MULTIMON
@@ -202,6 +205,7 @@ static const TermWinVtable windows_termwin_vt = {
     .palette_set = wintw_palette_set,
     .palette_get_overrides = wintw_palette_get_overrides,
     .unthrottle = wintw_unthrottle,
+    .file_transfer = win_transfer_osc,
 };
 
 static HICON trust_icon = static_cast<HICON>(INVALID_HANDLE_VALUE);
@@ -247,13 +251,19 @@ static bool win_seat_can_set_trust_status(Seat *seat);
 static bool win_seat_get_cursor_position(Seat *seat, int *x, int *y);
 static bool win_seat_get_window_pixel_size(Seat *seat, int *x, int *y);
 
+static void win_seat_notify_session_started(Seat *seat)
+{
+    WinGuiSeat *wgs = container_of(seat, WinGuiSeat, seat);
+    wgs->session_authenticated = true;
+}
+
 static const SeatVtable win_seat_vt = {
     .output = win_seat_output,
     .eof = win_seat_eof,
     .sent = nullseat_sent,
     .banner = nullseat_banner_to_stderr,
     .get_userpass_input = win_seat_get_userpass_input,
-    .notify_session_started = nullseat_notify_session_started,
+    .notify_session_started = win_seat_notify_session_started,
     .notify_remote_exit = win_seat_notify_remote_exit,
     .notify_remote_disconnect = nullseat_notify_remote_disconnect,
     .connection_fatal = win_seat_connection_fatal,
@@ -285,17 +295,22 @@ static void start_backend(WinGuiSeat *wgs)
     char *error, *realhost;
     int i;
 
+    wgs->session_authenticated = false;
+    win_transfer_prepare(wgs);
+
     wgs->cmdline_get_passwd_state = cmdline_get_passwd_input_state_new;
 
     vt = backend_vt_from_conf(wgs->conf);
 
     seat_set_trust_status(&wgs->seat, true);
-    error = backend_init(vt, &wgs->seat, &wgs->backend, wgs->logctx, wgs->conf,
+    Conf *backend_conf = win_transfer_backend_conf(wgs);
+    error = backend_init(vt, &wgs->seat, &wgs->backend, wgs->logctx, backend_conf,
                          conf_get_str(wgs->conf, CONF_host),
                          conf_get_int(wgs->conf, CONF_port),
                          &realhost,
                          conf_get_bool(wgs->conf, CONF_tcp_nodelay),
                          conf_get_bool(wgs->conf, CONF_tcp_keepalives));
+    conf_free(backend_conf);
     if (error) {
         char *str = dupprintf("%s Error", appname);
         char *msg;
@@ -882,6 +897,7 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
 
 static void wgs_cleanup(WinGuiSeat *wgs)
 {
+    win_transfer_cleanup(wgs);
     deinit_fonts(wgs);
     sfree(wgs->logpal);
     if (wgs->pal)
@@ -2204,6 +2220,9 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message,
     switch (message) {
       case WM_CREATE:
         break;
+      case WM_DROPFILES:
+        win_transfer_drop(wgs, reinterpret_cast<HDROP>(wParam));
+        return 0;
       case WM_CLOSE: {
         char *title, *msg, *additional = NULL;
         show_mouseptr(wgs, true);
@@ -2226,6 +2245,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message,
         return 0;
       }
       case WM_DESTROY:
+        win_transfer_cleanup(wgs);
         show_mouseptr(wgs, true);
         PostQuitMessage(0);
         return 0;
@@ -2268,8 +2288,8 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message,
             char *cl;
             const char *argprefix;
             bool inherit_handles;
-            STARTUPINFO si;
-            PROCESS_INFORMATION pi;
+            STARTUPINFO si = {};
+            PROCESS_INFORMATION pi = {};
             HANDLE filemap = NULL;
 
             if (restricted_acl())
@@ -2288,7 +2308,12 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message,
                 int size;
 
                 serbuf = strbuf_new();
-                conf_serialise(BinarySink_UPCAST(serbuf), wgs->conf);
+                Conf *duplicate_conf = gui_duplicate_session_conf(
+                    wgs->conf, wgs->session_authenticated &&
+                    !wgs->session_closed && wgs->backend &&
+                    backend_connected(wgs->backend) && backend_cfg_info(wgs->backend) != 1);
+                conf_serialise(BinarySink_UPCAST(serbuf), duplicate_conf);
+                conf_free(duplicate_conf);
                 size = serbuf->len;
 
                 sa.nLength = sizeof(sa);
@@ -2298,13 +2323,15 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message,
                                             &sa,
                                             PAGE_READWRITE,
                                             0, size, NULL);
-                if (filemap && filemap != INVALID_HANDLE_VALUE) {
-                    p = MapViewOfFile(filemap, FILE_MAP_WRITE, 0, 0, size);
-                    if (p) {
-                        memcpy(p, serbuf->s, size);
-                        UnmapViewOfFile(p);
-                    }
+                p = filemap ? MapViewOfFile(filemap, FILE_MAP_WRITE, 0, 0, size) : NULL;
+                if (!p) {
+                    if (filemap) CloseHandle(filemap);
+                    strbuf_free(serbuf);
+                    MessageBox(hwnd, "Unable to prepare the duplicate session.", appname, MB_OK | MB_ICONERROR);
+                    break;
                 }
+                memcpy(p, serbuf->s, size);
+                UnmapViewOfFile(p);
 
                 strbuf_free(serbuf);
                 inherit_handles = true;
@@ -2334,10 +2361,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message,
             si.dwFlags = 0;
             si.cbReserved2 = 0;
             si.lpReserved2 = NULL;
-            CreateProcess(b, cl, NULL, NULL, inherit_handles,
-                          NORMAL_PRIORITY_CLASS, NULL, NULL, &si, &pi);
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
+            if (CreateProcess(b, cl, NULL, NULL, inherit_handles,
+                              NORMAL_PRIORITY_CLASS, NULL, NULL, &si, &pi)) {
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            } else {
+                MessageBox(hwnd, "Unable to start the new session window.", appname, MB_OK | MB_ICONERROR);
+            }
 
             if (filemap)
                 CloseHandle(filemap);

@@ -1,0 +1,26 @@
+# Author: m3rlinek.
+# Executed by SSH for an interactive PuTTY session. No server files are created.
+case "${SHELL:-/bin/sh}" in
+    */bash|bash)
+        exec "$SHELL" --rcfile /dev/fd/3 -i 3<<'__PUTTY_FILE_TRANSFER_RC_29B06A__'
+# Match the usual Bash login startup, then install this session's bridge last.
+if [ -r /etc/profile ]; then . /etc/profile; fi
+if [ -r "$HOME/.bash_profile" ]; then
+    . "$HOME/.bash_profile"
+elif [ -r "$HOME/.bash_login" ]; then
+    . "$HOME/.bash_login"
+elif [ -r "$HOME/.profile" ]; then
+    . "$HOME/.profile"
+elif [ -r "$HOME/.bashrc" ]; then
+    . "$HOME/.bashrc"
+fi
+@PUTTY_TRANSFER_HELPER@
+# The startup stream is no longer needed; never leak it to child processes.
+exec 3<&-
+__PUTTY_FILE_TRANSFER_RC_29B06A__
+        ;;
+    *)
+        printf '%s\n' 'PuTTY: automatic file integration requires Bash; starting your normal shell.' >&2
+        exec "${SHELL:-/bin/sh}" -l
+        ;;
+esac

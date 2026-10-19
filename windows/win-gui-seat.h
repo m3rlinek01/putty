@@ -5,6 +5,7 @@
  */
 
 typedef struct WinGuiSeat WinGuiSeat;
+struct FileTransferState;
 
 struct PopupMenu {
     HMENU menu;
@@ -78,6 +79,7 @@ struct WinGuiSeat {
 
     struct unicode_data ucsdata;
     bool session_closed;
+    bool session_authenticated;
     bool reconfiguring;
 
     const SessionSpecial *specials;
@@ -88,6 +90,7 @@ struct WinGuiSeat {
     HMENU savedsess_menu;
 
     Conf *conf;
+    FileTransferState *file_transfer;
     LogContext *logctx;
     Terminal *term;
 

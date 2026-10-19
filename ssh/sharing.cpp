@@ -1987,6 +1987,10 @@ static int share_listen_accepting(Plug *plug,
  */
 static char *ssh_share_sockname(const char *host, int port, Conf *conf)
 {
+    const char *private_id = conf_get_str(conf, CONF_ssh_share_id);
+    if (*private_id)
+        return dupprintf("putty-window-transfer:%s", private_id);
+
     char *username = NULL;
     char *sockname;
 

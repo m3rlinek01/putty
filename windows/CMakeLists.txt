@@ -1,5 +1,16 @@
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
+# Keep the session-only startup code inside the EXE, with no Linux install.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/contrib/putty-transfer.sh"
+  "${CMAKE_SOURCE_DIR}/contrib/putty-transfer-bootstrap.sh.in")
+file(READ "${CMAKE_SOURCE_DIR}/contrib/putty-transfer.sh" PUTTY_TRANSFER_HELPER)
+configure_file("${CMAKE_SOURCE_DIR}/contrib/putty-transfer-bootstrap.sh.in"
+  "${GENERATED_SOURCES_DIR}/putty-transfer-bootstrap.sh" @ONLY NEWLINE_STYLE UNIX)
+file(READ "${GENERATED_SOURCES_DIR}/putty-transfer-bootstrap.sh" PUTTY_TRANSFER_BOOTSTRAP)
+configure_file("${CMAKE_SOURCE_DIR}/cmake/file-transfer-bootstrap.h.in"
+  "${GENERATED_SOURCES_DIR}/file-transfer-bootstrap.h" @ONLY NEWLINE_STYLE UNIX)
+
 add_sources_from_current_dir(utils
   utils/agent_mutex_name.cpp
   utils/agent_named_pipe_name.cpp
@@ -101,6 +112,7 @@ add_sources_from_current_dir(psocks nohelp.cpp)
 
 add_executable(putty
   window.cpp
+  file-transfer.cpp
   putty.cpp
   help.cpp
   ${CMAKE_SOURCE_DIR}/stubs/no-console.cpp
@@ -116,6 +128,7 @@ installed_program(putty)
 
 add_executable(puttytel
   window.cpp
+  file-transfer.cpp
   putty.cpp
   help.cpp
   ${CMAKE_SOURCE_DIR}/stubs/no-gss.cpp
@@ -155,6 +168,7 @@ installed_program(puttygen)
 if(HAVE_CONPTY)
   add_executable(pterm
     window.cpp
+    file-transfer.cpp
     pterm.cpp
     help.cpp
     conpty.cpp
@@ -206,3 +220,13 @@ target_link_libraries(test_terminal
   guiterminal settings eventloop utils ${platform_libraries})
 
 add_sources_from_current_dir(test_conf no-jump-list.cpp handle-wait.cpp)
+
+# The Explorer bridge creates native progress controls in each GUI frontend.
+foreach(frontend putty puttytel pterm)
+  if(TARGET ${frontend})
+    target_link_libraries(${frontend} comctl32)
+  endif()
+endforeach()
+
+add_executable(test_file_transfer test/test_file_transfer.cpp)
+target_link_libraries(test_file_transfer utils ${platform_libraries})

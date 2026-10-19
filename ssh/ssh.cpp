@@ -824,6 +824,10 @@ static char *connect_to_host(
          * We're not a downstream, so open a normal socket.
          */
 
+        if (conf_get_bool(ssh->conf, CONF_ssh_share_required))
+            return dupstr("The original PuTTY connection is unavailable; "
+                          "refusing to open a new connection for this shared session");
+
         /*
          * Try to find host.
          */

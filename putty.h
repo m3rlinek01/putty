@@ -1701,6 +1701,11 @@ struct TermWinVtable {
      * output has reduced. (Front ends will likely pass this straight
      * on to backend_unthrottle.) */
     void (*unthrottle)(TermWin *, size_t bufsize);
+
+    /* Optional frontend hook for complete OSC 777 shell-transfer messages.
+     * Data originates at the remote host and must be treated as untrusted.
+     * The string is valid only for the duration of this call. */
+    void (*file_transfer)(TermWin *, const char *payload);
 };
 
 static inline bool win_setup_draw_ctx(TermWin *win)
@@ -1759,6 +1764,8 @@ static inline void win_palette_get_overrides(TermWin *win, Terminal *term)
 { win->vt->palette_get_overrides(win, term); }
 static inline void win_unthrottle(TermWin *win, size_t size)
 { win->vt->unthrottle(win, size); }
+static inline void win_file_transfer(TermWin *win, const char *payload)
+{ if (win->vt->file_transfer) win->vt->file_transfer(win, payload); }
 
 /*
  * Global functions not specific to a connection instance.

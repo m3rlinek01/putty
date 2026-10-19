@@ -11,6 +11,12 @@ if(WIN32 AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   message(FATAL_ERROR "The Windows C++ port requires LLVM-MinGW Clang. Use build-cpp.ps1.")
 endif()
 
+if(WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  # Ship standalone EXEs: STL use must not add toolchain DLL dependencies.
+  # Windows system/UCRT imports remain dynamic as before.
+  add_link_options(-static)
+endif()
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-fno-strict-aliasing>)
 endif()

@@ -15,6 +15,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 
 import paramiko
 
@@ -25,7 +26,9 @@ host_key = paramiko.RSAKey.generate(2048)
 fingerprint = 'SHA256:' + base64.b64encode(hashlib.sha256(host_key.asbytes()).digest()).decode().rstrip('=')
 stop = threading.Event()
 transports = []
+auth_attempts = []
 results = []
+hold_ready = threading.Event()
 
 class Server(paramiko.ServerInterface):
     def __init__(self):
@@ -33,10 +36,14 @@ class Server(paramiko.ServerInterface):
     def get_allowed_auths(self, username):
         return 'password'
     def check_auth_password(self, username, password):
+        auth_attempts.append(username)
         return paramiko.AUTH_SUCCESSFUL if (username, password) == ('tester', 'local-test-only') else paramiko.AUTH_FAILED
     def check_channel_request(self, kind, chanid):
         return paramiko.OPEN_SUCCEEDED if kind == 'session' else paramiko.OPEN_FAILED_ADMINISTRATIVELY_PROHIBITED
     def check_channel_exec_request(self, channel, command):
+        if command == b'port-hold':
+            hold_ready.set()
+            return True
         if command != b'port-check':
             return False
         self.commands.put(channel)
@@ -80,6 +87,12 @@ class SFTP(paramiko.SFTPServerInterface):
             handle.readfile = None if flags & os.O_WRONLY else file
             handle.writefile = file if flags & (os.O_WRONLY | os.O_RDWR) else None
             return handle
+        except OSError as error:
+            return paramiko.SFTPServer.convert_errno(error.errno)
+    def mkdir(self, path, attr):
+        try:
+            self.local(path).mkdir()
+            return paramiko.SFTP_OK
         except OSError as error:
             return paramiko.SFTPServer.convert_errno(error.errno)
 
@@ -160,6 +173,83 @@ with tempfile.TemporaryDirectory(prefix='putty-cpp-integration-') as work:
         run('psftp batch upload/download', 'psftp.exe', common + ['-b', str(commands), 'tester@127.0.0.1'])
         assert (work / 'psftp.bin').read_bytes() == payload
         assert (remote / 'via-psftp.bin').read_bytes() == payload
+
+        # A private transfer endpoint must identify exactly one authenticated
+        # window, regardless of host/user placeholders passed by the GUI.
+        token = uuid.uuid4().hex
+        upstream = subprocess.Popen(
+            [str(bin_dir / 'plink.exe')] + common +
+            ['-share', '-share-id', token, '-l', 'tester', '127.0.0.1', 'port-hold'],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            assert hold_ready.wait(15), 'Private sharing upstream did not authenticate'
+            existing_connections = len(transports)
+            existing_authentications = len(auth_attempts)
+            # Open additional terminal channels with no password or key. The
+            # same endpoint must preserve the original authenticated identity.
+            for label in ('duplicate authenticated session', 'duplicate of duplicate'):
+                duplicate = run(label, 'plink.exe',
+                    ['-batch', '-noagent', '-share', '-share-id', token,
+                     '-l', 'not-the-original-user', 'invalid.invalid', 'port-check'])
+                assert duplicate.stdout.strip() == 'PUTTY_CPP_SSH_OK'
+                assert len(transports) == existing_connections, 'Duplicate opened another TCP connection'
+                assert len(auth_attempts) == existing_authentications, 'Duplicate authenticated again'
+            private = ['-batch', '-share-id', token]
+            # The remote path, local path and recursively enumerated filename
+            # all contain characters unavailable in a typical Windows ACP.
+            tree = work / 'drag folder \u6f22\U0001f642'
+            nested = tree / 'nested directory'
+            nested.mkdir(parents=True)
+            (nested / 'za\u017c\u00f3\u0142\u0107 \u6f22.txt').write_bytes(payload)
+            progress = run('private recursive Unicode upload', 'pscp.exe', private +
+                ['-r', '--', str(tree), 'unused@invalid.invalid:/'])
+            records = [line.split('\t') for line in progress.stdout.splitlines()
+                       if line.startswith('PUTTY-PROGRESS\t')]
+            assert records, 'Missing structured GUI progress records'
+            for record in records:
+                assert len(record) == 6, record
+                size, done, speed, eta = map(int, record[1:5])
+                assert 0 <= done <= size and speed >= 0 and eta >= 0, record
+                assert bytes.fromhex(record[5]).decode('utf-8') == 'za\u017c\u00f3\u0142\u0107 \u6f22.txt'
+            assert any(int(r[2]) == len(payload) for r in records), records
+            assert (remote / tree.name / nested.name / 'za\u017c\u00f3\u0142\u0107 \u6f22.txt').read_bytes() == payload
+            target = work / 'download \u6f22\U0001f642'
+            target.mkdir()
+            run('private recursive Unicode download', 'pscp.exe', private +
+                ['-r', '--', f'unused@invalid.invalid:/{tree.name}', str(target)])
+            assert (target / tree.name / nested.name / 'za\u017c\u00f3\u0142\u0107 \u6f22.txt').read_bytes() == payload
+            # Windows cannot represent '*' or '?' in a local filename, but
+            # brackets are valid and must be escaped for PSCP's remote parser.
+            (remote / 'literal[1].zip').write_bytes(payload)
+            literal = work / 'literal-result.zip'
+            run('private literal remote wildcard quoting', 'pscp.exe', private +
+                [r'unused@invalid.invalid:/literal\[1\].zip', str(literal)])
+            assert literal.read_bytes() == payload
+            junction = work / 'junction-to-dropped-tree'
+            subprocess.run([os.environ.get('COMSPEC', 'cmd.exe'), '/d', '/c',
+                            'mklink', '/J', str(junction), str(tree)],
+                           check=True, capture_output=True, timeout=10)
+            rejected = run('private upload refuses directory junction', 'pscp.exe',
+                           private + ['-r', '--', str(junction),
+                                      'unused@invalid.invalid:/'], expected=1)
+            assert 'junction' in rejected.stderr
+            assert not (remote / junction.name).exists()
+            assert len(transports) == existing_connections, 'Transfer opened a new TCP connection'
+            run('private wrong window fails without network fallback', 'pscp.exe',
+                ['-batch', '-share-id', uuid.uuid4().hex, '-P', port,
+                 str(source), 'tester@127.0.0.1:wrong-window.bin'], expected=1)
+            time.sleep(0.1)
+            assert len(transports) == existing_connections, 'Missing endpoint fell back to network'
+            assert not (remote / 'wrong-window.bin').exists()
+        finally:
+            upstream.kill()
+            upstream.communicate(timeout=10)
+        run('private closed session fails without network fallback', 'pscp.exe',
+            ['-batch', '-share-id', token, '-P', port,
+             str(source), 'tester@127.0.0.1:closed-window.bin'], expected=1)
+        time.sleep(0.1)
+        assert len(transports) == existing_connections, 'Closed endpoint fell back to network'
+        assert not (remote / 'closed-window.bin').exists()
     finally:
         stop.set()
         listener.close()

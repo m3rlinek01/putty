@@ -285,6 +285,39 @@ CONF_OPTION(ssh_connection_sharing,
     DEFAULT_BOOL(false),
     SAVE_KEYWORD("ConnectionSharing"),
 )
+CONF_OPTION(ssh_file_transfer,
+    VALUE_TYPE(BOOL),
+    DEFAULT_BOOL(true),
+    SAVE_KEYWORD("SSHFileTransfer"),
+)
+CONF_OPTION(ssh_download_directory,
+    /* Explicit UTF-8, including in saved settings; handled by a UTF-8 editbox. */
+    VALUE_TYPE(STR),
+    DEFAULT_STR(""),
+    SAVE_KEYWORD("SSHDownloadDirectory"),
+)
+CONF_OPTION(ssh_file_transfer_auto,
+    VALUE_TYPE(BOOL),
+    DEFAULT_BOOL(true),
+    SAVE_KEYWORD("SSHFileTransferAuto"),
+)
+CONF_OPTION(ssh_duplicate_session,
+    VALUE_TYPE(BOOL),
+    DEFAULT_BOOL(true),
+    SAVE_KEYWORD("SSHDuplicateAuthenticatedSession"),
+)
+CONF_OPTION(ssh_share_id,
+    /* Private per-window transfer endpoint; never persist in saved sessions. */
+    VALUE_TYPE(STR),
+    DEFAULT_STR(""),
+    NOT_SAVED,
+)
+CONF_OPTION(ssh_share_required,
+    /* A transfer must fail rather than open a fresh network connection. */
+    VALUE_TYPE(BOOL),
+    DEFAULT_BOOL(false),
+    NOT_SAVED,
+)
 CONF_OPTION(ssh_connection_sharing_upstream,
     VALUE_TYPE(BOOL),
     DEFAULT_BOOL(true),

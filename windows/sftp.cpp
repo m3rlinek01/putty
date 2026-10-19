@@ -1,3 +1,4 @@
+/* Windows extensions: m3rlinek. */
 /*
  * sftp.cpp: the Windows-specific parts of PSFTP and PSCP.
  */
@@ -11,6 +12,49 @@
 #include "psftp.h"
 #include "ssh.h"
 #include "security-api.h"
+#include "file-transfer-paths.h"
+
+/* Only the private GUI-transfer invocation changes the legacy ACP contract. */
+bool pscp_utf8_paths = false;
+
+static wchar_t *file_path_wide(const char *name)
+{
+    return dup_mb_to_wc(pscp_utf8_paths ? CP_UTF8 : CP_ACP, name);
+}
+
+static char *file_name_narrow(const wchar_t *name)
+{
+    return dup_wc_to_mb(pscp_utf8_paths ? CP_UTF8 : CP_ACP, name, "");
+}
+
+static HANDLE file_open(const char *name, DWORD access, DWORD share,
+                        DWORD disposition, DWORD attributes)
+{
+    wchar_t *wide = file_path_wide(name);
+    HANDLE h = CreateFileW(wide, access, share, NULL, disposition, attributes, NULL);
+    DWORD error = GetLastError();
+    sfree(wide);
+    SetLastError(error);
+    return h;
+}
+
+static DWORD file_attributes(const char *name)
+{
+    wchar_t *wide = file_path_wide(name);
+    DWORD result = GetFileAttributesW(wide);
+    sfree(wide);
+    return result;
+}
+
+static HANDLE file_find_first(const char *name, WIN32_FIND_DATAW *data)
+{
+    wchar_t *wide = file_path_wide(name);
+    HANDLE h = FindFirstFileW(wide, data);
+    DWORD error = GetLastError();
+    sfree(wide);
+    SetLastError(error);
+    return h;
+}
 
 SeatPromptResult filexfer_get_userpass_input(Seat *seat, prompts_t *p)
 {
@@ -106,8 +150,7 @@ RFile *open_existing_file(const char *name, uint64_t *size,
     HANDLE h;
     RFile *f;
 
-    h = CreateFile(name, GENERIC_READ, FILE_SHARE_READ, NULL,
-                   OPEN_EXISTING, 0, 0);
+    h = file_open(name, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING, 0);
     if (h == INVALID_HANDLE_VALUE)
         return NULL;
 
@@ -159,8 +202,7 @@ WFile *open_new_file(const char *name, long perms)
     HANDLE h;
     WFile *f;
 
-    h = CreateFile(name, GENERIC_WRITE, 0, NULL,
-                   CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    h = file_open(name, GENERIC_WRITE, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL);
     if (h == INVALID_HANDLE_VALUE)
         return NULL;
 
@@ -175,8 +217,7 @@ WFile *open_existing_wfile(const char *name, uint64_t *size)
     HANDLE h;
     WFile *f;
 
-    h = CreateFile(name, GENERIC_WRITE, FILE_SHARE_READ, NULL,
-                   OPEN_EXISTING, 0, 0);
+    h = file_open(name, GENERIC_WRITE, FILE_SHARE_READ, OPEN_EXISTING, 0);
     if (h == INVALID_HANDLE_VALUE)
         return NULL;
 
@@ -257,11 +298,23 @@ uint64_t get_file_posn(WFile *f)
 int file_type(const char *name)
 {
     DWORD attr;
-    attr = GetFileAttributes(name);
-    /* We know of no `weird' files under Windows. */
+    attr = file_attributes(name);
     if (attr == (DWORD)-1)
         return FILE_TYPE_NONEXISTENT;
-    else if (attr & FILE_ATTRIBUTE_DIRECTORY)
+    if (pscp_utf8_paths && (attr & FILE_ATTRIBUTE_REPARSE_POINT)) {
+        WIN32_FIND_DATAW data;
+        HANDLE find = file_find_first(name, &data);
+        if (find == INVALID_HANDLE_VALUE)
+            return FILE_TYPE_NONEXISTENT;
+        FindClose(find);
+        /* Do not follow junctions or symbolic links out of the dropped tree
+         * or into cycles. Cloud/OneDrive placeholder tags remain supported. */
+        if (data.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT ||
+            data.dwReserved0 == IO_REPARSE_TAG_SYMLINK)
+            return FILE_TYPE_WEIRD;
+    }
+    /* Other Windows files, including cloud placeholders, retain normal IO. */
+    if (attr & FILE_ATTRIBUTE_DIRECTORY)
         return FILE_TYPE_DIRECTORY;
     else
         return FILE_TYPE_FILE;
@@ -275,13 +328,13 @@ struct DirHandle {
 DirHandle *open_directory(const char *name, const char **errmsg)
 {
     HANDLE h;
-    WIN32_FIND_DATA fdat;
+    WIN32_FIND_DATAW fdat;
     char *findfile;
     DirHandle *dir;
 
     /* Enumerate files in dir `foo'. */
     findfile = dupcat(name, "/*");
-    h = FindFirstFile(findfile, &fdat);
+    h = file_find_first(findfile, &fdat);
     if (h == INVALID_HANDLE_VALUE) {
         *errmsg = win_strerror(GetLastError());
         return NULL;
@@ -290,7 +343,7 @@ DirHandle *open_directory(const char *name, const char **errmsg)
 
     dir = snew(DirHandle);
     dir->h = h;
-    dir->name = dupstr(fdat.cFileName);
+    dir->name = file_name_narrow(fdat.cFileName);
     return dir;
 }
 
@@ -299,11 +352,11 @@ char *read_filename(DirHandle *dir)
     do {
 
         if (!dir->name) {
-            WIN32_FIND_DATA fdat;
-            if (!FindNextFile(dir->h, &fdat))
+            WIN32_FIND_DATAW fdat;
+            if (!FindNextFileW(dir->h, &fdat))
                 return NULL;
             else
-                dir->name = dupstr(fdat.cFileName);
+                dir->name = file_name_narrow(fdat.cFileName);
         }
 
         assert(dir->name);
@@ -335,14 +388,14 @@ void close_directory(DirHandle *dir)
 int test_wildcard(const char *name, bool cmdline)
 {
     HANDLE fh;
-    WIN32_FIND_DATA fdat;
+    WIN32_FIND_DATAW fdat;
 
     /* First see if the exact name exists. */
-    if (GetFileAttributes(name) != (DWORD)-1)
+    if (file_attributes(name) != (DWORD)-1)
         return WCTYPE_FILENAME;
 
     /* Otherwise see if a wildcard match finds anything. */
-    fh = FindFirstFile(name, &fdat);
+    fh = file_find_first(name, &fdat);
     if (fh == INVALID_HANDLE_VALUE)
         return WCTYPE_NONEXISTENT;
 
@@ -383,11 +436,11 @@ char *stripslashes(const char *str, bool local)
 WildcardMatcher *begin_wildcard_matching(const char *name)
 {
     HANDLE h;
-    WIN32_FIND_DATA fdat;
+    WIN32_FIND_DATAW fdat;
     WildcardMatcher *dir;
     char *last;
 
-    h = FindFirstFile(name, &fdat);
+    h = file_find_first(name, &fdat);
     if (h == INVALID_HANDLE_VALUE)
         return NULL;
 
@@ -400,8 +453,11 @@ WildcardMatcher *begin_wildcard_matching(const char *name)
         (fdat.cFileName[1] == '\0' ||
          (fdat.cFileName[1] == '.' && fdat.cFileName[2] == '\0')))
         dir->name = NULL;
-    else
-        dir->name = dupcat(dir->srcpath, fdat.cFileName);
+    else {
+        char *filename = file_name_narrow(fdat.cFileName);
+        dir->name = dupcat(dir->srcpath, filename);
+        sfree(filename);
+    }
 
     return dir;
 }
@@ -409,17 +465,20 @@ WildcardMatcher *begin_wildcard_matching(const char *name)
 char *wildcard_get_filename(WildcardMatcher *dir)
 {
     while (!dir->name) {
-        WIN32_FIND_DATA fdat;
+        WIN32_FIND_DATAW fdat;
 
-        if (!FindNextFile(dir->h, &fdat))
+        if (!FindNextFileW(dir->h, &fdat))
             return NULL;
 
         if (fdat.cFileName[0] == '.' &&
             (fdat.cFileName[1] == '\0' ||
              (fdat.cFileName[1] == '.' && fdat.cFileName[2] == '\0')))
             dir->name = NULL;
-        else
-            dir->name = dupcat(dir->srcpath, fdat.cFileName);
+        else {
+            char *filename = file_name_narrow(fdat.cFileName);
+            dir->name = dupcat(dir->srcpath, filename);
+            sfree(filename);
+        }
     }
 
     if (dir->name) {
@@ -441,6 +500,9 @@ void finish_wildcard_matching(WildcardMatcher *dir)
 
 bool vet_filename(const char *name)
 {
+    if (pscp_utf8_paths)
+        return putty_transfer::safe_basename(putty_transfer::wide(name));
+
     if (strchr(name, '/') || strchr(name, '\\') || strchr(name, ':'))
         return false;
 
@@ -452,7 +514,10 @@ bool vet_filename(const char *name)
 
 bool create_directory(const char *name)
 {
-    return CreateDirectory(name, NULL) != 0;
+    wchar_t *wide = file_path_wide(name);
+    bool result = CreateDirectoryW(wide, NULL) != 0;
+    sfree(wide);
+    return result;
 }
 
 char *dir_file_cat(const char *dir, const char *file)

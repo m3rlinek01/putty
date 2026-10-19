@@ -3238,6 +3238,13 @@ static void do_osc(Terminal *term)
                 }
             }
             break;
+          case 777:
+            /* Never execute an ambiguous prefix of a truncated request.
+             * Existing title/palette truncation semantics stay unchanged. */
+            if (!term->osc_overflow &&
+                !memchr(term->osc_string, '\0', term->osc_strlen))
+                win_file_transfer(term->win, term->osc_string);
+            break;
         }
         break;
       default:
@@ -4126,6 +4133,7 @@ static void term_out(Terminal *term, bool called_from_term_data)
                     term->termstate = SEEN_OSC;
                     term->osc_type = OSCLIKE_OSC;
                     term->osc_strlen = 0;
+                    term->osc_overflow = false;
                     term->esc_args[0] = 0;
                     term->esc_nargs = 1;
                     break;
@@ -4145,6 +4153,7 @@ static void term_out(Terminal *term, bool called_from_term_data)
                                       c == 'X' ? OSCLIKE_SOS :
                                       c == '^' ? OSCLIKE_PM : OSCLIKE_APC);
                     term->osc_strlen = 0;
+                    term->osc_overflow = false;
                     term->esc_args[0] = 0;
                     term->esc_nargs = 1;
                     break;
@@ -5392,6 +5401,8 @@ static void term_out(Terminal *term, bool called_from_term_data)
                 /* Anything else gets added to the string */
                 if (term->osc_strlen < OSC_STR_MAX)
                     term->osc_string[term->osc_strlen++] = (char)c;
+                else
+                    term->osc_overflow = true;
                 break;
               case OSC_MAYBE_ST_UTF8:
                 /* In UTF-8 mode, we've seen C2, so are we now seeing
@@ -5407,8 +5418,12 @@ static void term_out(Terminal *term, bool called_from_term_data)
                  * OSC string accumulation */
                 if (term->osc_strlen < OSC_STR_MAX)
                     term->osc_string[term->osc_strlen++] = 0xC2;
+                else
+                    term->osc_overflow = true;
                 if (term->osc_strlen < OSC_STR_MAX)
                     term->osc_string[term->osc_strlen++] = (char)c;
+                else
+                    term->osc_overflow = true;
                 term->termstate = OSC_STRING;
                 break;
               case SEEN_OSC_P: {
