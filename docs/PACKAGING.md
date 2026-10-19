@@ -1,16 +1,13 @@
-# Pakiety Windows
+# Windows packages
 
-Autor modyfikacji i pakowania: **m3rlinek**.
+Each architecture has an EXE installer and a portable ZIP containing all nine
+programs, transfer instructions and licenses. Compiler runtimes are linked
+statically. Targets require Windows 10/11 x64 or Windows 10 x86.
 
-Każda architektura ma instalator EXE i portable ZIP. Wszystkie dziewięć
-programów oraz licencje są dołączone. Biblioteki kompilatora są linkowane
-statycznie; wymagane są systemowe biblioteki Windows 10/11 (x86: Windows 10).
+## Build
 
-## Budowanie
-
-W PATH muszą znajdować się LLVM-MinGW UCRT, CMake oraz Inno Setup 7.1.0
-(`ISCC.exe`). Kompilatory docelowe x64 i x86 są częścią jednego LLVM-MinGW.
-Inno Setup pobierz z [oficjalnej strony](https://jrsoftware.org/isdl.php).
+Add LLVM-MinGW UCRT, CMake and Inno Setup 7.1.0 (`ISCC.exe`) to PATH.
+Download Inno Setup from its [official site](https://jrsoftware.org/isdl.php).
 
 ```powershell
 .\build-cpp.ps1 -Architecture x64 -Test
@@ -19,32 +16,35 @@ Inno Setup pobierz z [oficjalnej strony](https://jrsoftware.org/isdl.php).
 .\package-windows.ps1 -Architecture x86
 ```
 
-Można podać `-InstallerCompiler C:\Tools\InnoSetup\ISCC.exe`,
-`-PackageDirectory`, `-OutputDirectory` i `-Version 0.85-cpp.2`.
-Skrypt sprawdza architekturę wszystkich EXE przed pakowaniem.
-Paczkuje wyłącznie wskazane pliki, bez podkatalogów innych architektur.
-Binaria są w `dist/` (x64) i `dist/x86/`; pakiety w `out/`.
+Optional arguments are `-InstallerCompiler C:\Tools\InnoSetup\ISCC.exe`,
+`-PackageDirectory`, `-OutputDirectory` and `-Version 0.85-cpp.2`.
+The script checks each executable's PE architecture before packaging and uses
+an explicit file list. It does not include other architecture subdirectories.
 
-## Instalacja
+Binaries are in `dist/` and `dist/x86/`; packages are written to `out/`.
 
-Instalator ma języki polski i angielski, działa bez uprawnień administratora
-i instaluje do `%LOCALAPPDATA%\Programs\PuTTY-m3rlinek-x64` lub `-x86`.
-Dodaje skróty w menu Start; skrót pulpitu jest opcjonalny.
-Warianty mają osobne identyfikatory instalacji i mogą współistnieć.
-Nie zmienia PATH ani zapisanych sesji PuTTY. Deinstalator usuwa własne pliki,
-skróty i wpis instalacji, zachowując konfigurację sesji.
-Wersje instalacyjne i portable nie mają podpisu cyfrowego.
+## Installer behavior
 
-## Weryfikacja
+The installer supports Polish and English and runs without administrator
+privileges. It installs to `%LOCALAPPDATA%\Programs\PuTTY-m3rlinek-x64` or
+`PuTTY-m3rlinek-x86`, with Start menu shortcuts and an optional desktop shortcut.
+The variants use separate installation IDs and can coexist.
+
+Installation does not change PATH or saved PuTTY sessions. Uninstallation
+removes installed files, shortcuts and the uninstall entry, leaving session
+settings in place. Installers and application executables are unsigned.
+
+## Package checks
 
 ```powershell
 python test/portable_windows.py out/PuTTY-0.85-cpp.2-windows-x86-portable.zip --architecture x86 --readobj C:\Tools\llvm-mingw\bin\llvm-readobj.exe
 python test/installer_windows.py out/PuTTY-0.85-cpp.2-windows-x86-setup.exe out/PuTTY-0.85-cpp.2-windows-x86-portable.zip --architecture x86
 ```
 
-Powtórz z `x64`. Test portable sprawdza nagłówki PE, importy systemowe
-i uruchamianie programów bez toolchainu w PATH. Test instalatora sprawdza
-cichą instalację w katalogu tymczasowym, zgodność plików z ZIP, ponowną
-instalację i deinstalację. Odmawia zastąpienia istniejącej instalacji.
-Wersja x86 jest testowana na Windows x64 przez WOW64; osobny system
-Windows 10 32-bit nie został przetestowany.
+Repeat with `x64`. The portable check validates PE headers, system imports and
+startup without the toolchain in PATH. The installer check uses a temporary
+directory to test silent installation, file hashes against the ZIP, reinstall
+and uninstall. It refuses to replace an existing registered installation.
+
+The x86 package was tested through WOW64 on Windows x64. A separate Windows 10
+32-bit installation has not been tested.

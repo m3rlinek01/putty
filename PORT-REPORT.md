@@ -1,30 +1,24 @@
-# Port PuTTY 0.85 — Windows x64
+# Port status
 
-Modyfikacje portu i rozszerzenia Windows: **m3rlinek**.
+PuTTY 0.85 is compiled as C++20 with LLVM-MinGW Clang extensions. The original
+procedural structure, algorithms and license are retained. Upstream archive
+metadata is in [UPSTREAM.json](UPSTREAM.json). The port and Windows extensions
+are maintained by **m3rlinek**.
 
-Oficjalne źródła PuTTY 0.85 są kompilowane jako C++20 z rozszerzeniami Clang.
-Zachowano model danych, algorytmy i licencję upstream. Metadane archiwum
-źródłowego i SHA-256 znajdują się w `UPSTREAM.json`.
+All nine Windows applications build for x64 and x86. Compiler runtimes are
+linked statically; remaining imports are Windows system libraries. Distribution
+packages include the LLVM runtime license. MSVC, GCC and Unix/macOS builds
+have not been verified.
 
-Zbudowano dziewięć aplikacji: PuTTY, PuTTYtel, Plink, PSCP, PSFTP, PuTTYgen,
-Pageant, Pterm i Psocks. Biblioteki C++ są wbudowane w EXE; pozostałe importy
-pochodzą z systemu Windows. Licencję tych bibliotek dołączono do paczki.
+Windows additions include Explorer uploads, downloads through `cp file "$win"`,
+automatic in-memory Bash integration, native transfer progress and Duplicate
+Session over an authenticated connection.
 
-## Rozszerzenia
+Both architectures passed 13 CTest suites, including 90 cryptographic tests
+and local SSH/SFTP integration. Bash helper and startup checks passed separately.
+Portable checks cover imports and startup without the toolchain in PATH.
+Installer checks cover installation, file hashes, reinstall and uninstallation.
+The x86 build was tested through WOW64 rather than a separate 32-bit OS.
 
-- Transfer SFTP z Eksploratora do katalogu zdalnego promptu.
-- Pobieranie przez `cp plik "$win"`, z wyborem lokalnego folderu.
-- Integracja interaktywnego Bash przygotowywana automatycznie w pamięci.
-- Natywny pasek postępu, anulowanie, Unicode i ochrona przed lokalnym nadpisaniem.
-- Duplicate Session korzystające z uwierzytelnionego połączenia bez nowego hasła.
-
-## Walidacja
-
-Pełny zestaw: 13 CTest, w tym 90 testów kryptograficznych i 13 kontroli lokalnego
-SSH/SFTP. Osobne testy Bash obejmują 14 kontroli helpera i 5 kontroli startu.
-Testy przenośnej paczki sprawdzają importy dziewięciu EXE oraz start wybranych
-programów z PATH ograniczonym do Windows System32.
-
-Nie potwierdzono wszystkich rzeczywistych serwerów SSH, pełnej interakcji GUI,
-fizycznego portu szeregowego, Kerberos/GSSAPI ani kompilacji innych systemów.
-Programy nie mają podpisu cyfrowego oficjalnego wydawcy PuTTY.
+See [transfer validation](docs/FILE-TRANSFER-VALIDATION.md) for test coverage and
+untested cases. The executables and installers are unsigned.

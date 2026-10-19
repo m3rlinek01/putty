@@ -1,9 +1,9 @@
-# Wyniki testów
+# Test output
 
-Pełny zestaw uruchamia `build-cpp.ps1 -Test`. Aktualny log CTest znajduje się
-w `build/Testing/Temporary/LastTest.log`. Test lokalnego SSH/SFTP zapisuje raport
-`validation/integration.json`, ignorowany przez Git.
+Run `build-cpp.ps1 -Test` for x64 or add `-Architecture x86` for the 32-bit build.
+CTest writes `build/Testing/Temporary/LastTest.log` or
+`build-x86/Testing/Temporary/LastTest.log`. Local SSH/SFTP tests write
+`validation/integration.json`.
 
-Raporty lokalne zawierają ścieżki środowiska testowego i nie są częścią kodu
-źródłowego ani paczki dystrybucyjnej. Zakres sprawdzeń opisuje
-`docs/FILE-TRANSFER-VALIDATION.md`.
+Generated reports contain local environment paths and are ignored by Git.
+See [transfer validation](../docs/FILE-TRANSFER-VALIDATION.md) for coverage.

@@ -1,36 +1,34 @@
-# Zweryfikowane środowisko
+# Tested toolchain
 
-| Element | Wersja / wariant |
+| Component | Version |
 |---|---|
-| Platforma | Windows x64 |
-| Język aplikacji | C++20 z rozszerzeniami Clang dla inicjalizatorów C99 |
-| Kompilator | LLVM-MinGW UCRT x86_64, Clang 22.1.8 |
-| Wydanie kompilatora | `20260616` |
+| Build host | Windows x64 |
+| Targets | Windows x64 and x86 |
+| Language | C++20 with Clang extensions for C99 initializers |
+| Compiler | LLVM-MinGW UCRT, Clang 22.1.8, release `20260616` |
 | Generator | MinGW Makefiles / `mingw32-make` |
-| CMake | 4.4.4, projekt wymaga minimum 3.21 |
-| Python | 3.13.15 na pierwszym komputerze |
-| Paramiko | 5.0.0, wymaganie zapisane w `test/requirements-port.txt` |
+| CMake | 4.4.4; minimum required: 3.21 |
+| Python | 3.13.2 |
+| Paramiko | 5.0.0 |
+| Installer compiler | Inno Setup 7.1.0 |
 
-Oficjalne wydanie toolchainu:
-https://github.com/mstorsjo/llvm-mingw/releases/tag/20260616
-
-Archiwum: `llvm-mingw-20260616-ucrt-x86_64.zip`.
-SHA-256 z metadanych wydania GitHub:
+Toolchain release: [LLVM-MinGW 20260616](https://github.com/mstorsjo/llvm-mingw/releases/tag/20260616).
+The `llvm-mingw-20260616-ucrt-x86_64.zip` archive has SHA-256:
 
 ```text
 b9b68a4d276e16fa25802aaba458e4638f64b3884c290aaccdc2d87083b6ca35
 ```
 
-Sprawdzenie pobranego pliku:
+Check the downloaded archive with:
 
 ```powershell
 Get-FileHash .\llvm-mingw-20260616-ucrt-x86_64.zip -Algorithm SHA256
 ```
 
-To nie jest toolchain MSVC ani `clang-cl`; wybrano kompilator kierujący na
-`x86_64-w64-windows-gnu`. Projekt nie ma jeszcze potwierdzonej zgodności
-ze ścisłym ISO C++20, MSVC, GCC ani buildami Unix/macOS.
+This package includes `x86_64-w64-mingw32-clang++` and
+`i686-w64-mingw32-clang++`. It is not an MSVC or `clang-cl` toolchain.
+Strict ISO C++20, MSVC, GCC and Unix/macOS builds have not been verified.
 
-Testy kryptograficzne używają biblioteki standardowej Pythona. Paramiko jest
-potrzebne jedynie do tymczasowego serwera w teście integracyjnym. Żadne testy
-nie wymagają danych logowania do rzeczywistych serwerów.
+The cryptographic test driver uses Python's standard library. Paramiko is needed
+for the temporary SSH/SFTP integration server. Tests use local keys and files,
+not credentials for an external server.

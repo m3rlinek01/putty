@@ -1,31 +1,28 @@
-# Duplicate Session bez ponownego logowania
+# Duplicate Session
 
-W nowej wersji PuTTY zaloguj się raz na serwer SSH-2, a następnie wybierz
-**Duplicate Session** z menu okna. Nowe okno otwiera osobną powłokę z tym samym
-użytkownikiem na już uwierzytelnionym połączeniu. Nie zapisuje ani nie odtwarza
-hasła. Można również duplikować okno będące duplikatem.
+Log in to an SSH-2 server, then select **Duplicate Session** from the window
+menu. The new window opens a separate shell as the same user over the existing
+authenticated connection. Passwords are not stored or replayed. A duplicate can
+also be duplicated.
 
-Integracja Bash, przeciąganie plików i pobieranie przez `$win` pozostają
-dostępne. Każda powłoka ma własny bieżący katalog, zgłaszany osobno przez prompt.
-Duplikowanie tworzy nową powłokę; nie kopiuje pamięci procesu, zmiennych ani
-uruchomionych programów ze starej konsoli.
+Each shell has its own current directory and prompt reporting. Bash setup and
+file transfers remain available. Duplication does not copy shell variables,
+process memory or running programs from the original shell.
 
-Funkcja jest domyślnie włączona w **Connection → SSH → Duplicate logged-in
-sessions without authenticating again**, również gdy transfer plików jest
-wyłączony. Zmiana wymaga nowego połączenia. Przy pierwszym uruchomieniu tej
-wersji należy połączyć się normalnie; okna pozostawione ze starszej wersji
-programu nie uzyskują tej funkcji automatycznie.
+The option **Connection > SSH > Duplicate logged-in sessions without
+authenticating again** is enabled by default and works with file transfers
+disabled. Reconnect after changing it. Windows opened by an older executable
+need a new connection before this behavior is available.
 
-Okno pierwotne utrzymuje wspólne połączenie SSH. Jego zamknięcie rozłączy
-duplikaty (PuTTY pokazuje ostrzeżenie o połączeniach downstream). Zamknięcie
-samego duplikatu nie zamyka pozostałych powłok. Jeśli pierwotne połączenie
-zniknie w trakcie otwierania duplikatu, program zgłosi błąd zamiast łączyć się
-ponownie z innym serwerem lub prosić o hasło dla nowego połączenia.
+The original window owns the shared SSH connection. Closing it disconnects its
+duplicates; PuTTY warns about connected downstreams. Closing a duplicate leaves
+the other shells open. If the original connection disappears while a duplicate
+is opening, the new window reports an error rather than making a fresh
+connection or requesting a password.
 
-Dla okna niezalogowanego, zamkniętej sesji, wyłączonej opcji i protokołów innych
-niż standardowy SSH-2 zachowane jest zwykłe tworzenie nowego połączenia.
+An unauthenticated window, a closed connection, a disabled option or a protocol
+other than standard SSH-2 uses the normal new-connection behavior.
 
-Sprawdzenia automatyczne obejmują kopiowanie i serializację ustawień okna,
-zachowanie identyfikatora przy duplikowaniu duplikatu i otwieranie dodatkowych
-kanałów SSH bez nowej sesji TCP ani nowego uwierzytelnienia. Ręcznej próby menu
-w działającym GUI nie wykonano.
+Automated checks cover configuration copying and serialization, nested
+duplicates and extra SSH channels without new TCP connections or authentication
+attempts. The menu interaction itself has not been tested automatically.

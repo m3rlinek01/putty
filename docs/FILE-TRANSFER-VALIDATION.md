@@ -1,74 +1,47 @@
-# Walidacja transferu — 19 października 2026
+# Transfer validation
 
-## Duplicate Session
+Validated on Windows x64 with LLVM-MinGW Clang 22.1.8 (`20260616`), CMake 4.4.4,
+Python 3.13.2 and Paramiko 5.0.0. Both x64 and x86 builds passed 13/13 CTest suites
+for release `v0.85-cpp.2` on 2026-10-19. The x86 tests ran through WOW64.
 
-Wersja z automatycznym dołączaniem duplikatu do uwierzytelnionego połączenia
-przeszła 13/13 CTest w 17,65 s; log: `build/duplicate-session.log`.
-Test `conf` sprawdza kopiowanie i rzeczywistą serializację ustawień, zachowanie
-endpointu przy duplikowaniu duplikatu, niezmienność oryginału, wyłączone transfery,
-wyłączenie funkcji oraz niezalogowane okno i inny protokół.
-Lokalna integracja SSH/SFTP ma teraz 13 kontroli: dodano dwie dodatkowe powłoki
-bez podawania hasła, z asercjami braku nowej sesji TCP i nowych prób logowania.
-Pozostałe testy transferu są wykonywane po tych operacjach na tym samym
-połączeniu. Ręcznej próby opcji Duplicate Session w GUI nie wykonano.
+## Coverage
 
-## Automatyczny start i natywny postęp
+| Check | Coverage |
+|---|---|
+| `file_transfer` | 158 checks of paths, reserved Windows names, UTF-8, argument quoting and progress records |
+| `terminal` | OSC 777, BEL/ST termination, fragmented input, NUL, overflow recovery and absent callbacks |
+| `conf` | Configuration copying and serialization, nested duplicate IDs, disabled options and ineligible sessions |
+| `crypto` | 90 upstream cryptographic tests |
+| `local_ssh_sftp` | 13 checks, including host-key rejection, recursive Unicode transfer, literal brackets, junction rejection and shared shell channels |
+| `transfer_shell.py` | 14 Bash helper tests |
+| `transfer_bootstrap.py` | 5 startup tests using Git Bash |
+| `portable_windows.py` | PE architecture, imports of nine programs, CLI startup and hidden GUI startup with system-only PATH |
+| `installer_windows.py` | Silent install, hashes against portable ZIP, CLI startup, reinstall and uninstall for both architectures |
 
-Wbudowano przygotowanie interaktywnego Bash przez strumień startowy SSH,
-bez pliku helpera na serwerze i bez edycji profilu. Test
-`test/transfer_bootstrap.py` przeszedł 5/5 kontroli: zgodność skryptu z danymi
-w EXE, gotowe `$win`/`cp`, zachowane profile/hooki, zwykłe `cp`, zamknięcie fd3
-i powrót do zwykłej powłoki w przypadku powłoki innej niż Bash. Test wykonano
-lokalnie w Git Bash; zwykła historia `.bash_history` nie jest instalacją helpera.
-Dotychczasowy helper przeszedł ponownie 14/14 testów.
+The SSH/SFTP tests check that additional shells do not create another TCP
+connection or authentication attempt. Transfer tests also check that a missing
+or incorrect private endpoint does not fall back to a new connection.
 
-Nowy pasek Windows korzysta z rekordów liczbowych PSCP. Test natywny ma obecnie
-158 kontroli, w tym fragmentację rekordów, przepełnienie, UTF-8, zerowe pliki
-i limity buforów. Integracja SFTP sprawdza także rzeczywiste rekordy postępu.
-Pełny build tej wersji przeszedł 13/13 CTest w 17,23 s; log:
-`build/automatic-progress-final.log`. Ponieważ użytkownik korzystał z poprzedniego
-`dist/putty.exe`, nową paczkę przygotowano w `out/automatic-progress` przez
-opcję `build-cpp.ps1 -DistDirectory`, bez zamykania aktywnej sesji.
-Nadal nie wykonano ręcznej oceny wyglądu podczas transferu ani testu Zsh.
+Bootstrap checks cover embedded script data, `$win` and `cp`, existing profiles
+and prompt hooks, ordinary `cp`, closing fd 3 and fallback for non-Bash shells.
+The helper is not installed on the server.
 
-## Poprawka samowystarczalnej paczki
+Progress checks include fragmented records, overflow, UTF-8, empty files and
+buffer limits. SFTP integration also checks records emitted by PSCP.
 
-Po zgłoszeniu braku `libc++.dll` potwierdzono, że pierwsza paczka miała
-niezamierzone zależności od `libc++.dll` i `libunwind.dll`. Testy z toolchainem
-w PATH nie wykrywały błędu. Włączono statyczne linkowanie bibliotek kompilatora
-i dodano odmowę pakowania EXE zależnych od takich DLL.
+Portable tests extract the actual archive to a temporary directory, reject
+compiler DLL dependencies and start Plink, PSCP and PSFTP with PATH restricted
+to Windows System32. PuTTY, PuTTYtel and PuTTYgen are started hidden and stopped
+by the test. Installer tests refuse to replace an existing installation.
 
-Nowy build przeszedł ponownie 13/13 CTest (16,90 s). Test
-`test/portable_windows.py` sprawdził rzeczywiście rozpakowany ZIP w katalogu
-tymczasowym: wszystkie dziewięć EXE importuje tylko biblioteki systemu Windows;
-Plink/PSCP/PSFTP oraz ukryty start PuTTY/PuTTYtel/PuTTYgen przeszły z PATH
-ograniczonym do Windows System32, bez dodatkowych DLL w paczce.
-Nie jest to pełny test interaktywny GUI. Log: `build/portable-fix.log`.
-Biblioteki LLVM są wbudowane w EXE; dołączono ich licencję.
+## Logs and limits
 
-Środowisko: Windows x64, LLVM-MinGW Clang 22.1.8 (wydanie 20260616,
-SHA-256 zgodne z TOOLCHAIN.md), CMake 4.4.4, Python 3.13.2, Paramiko 5.0.0.
+CTest logs are local to `build/Testing/Temporary/LastTest.log` and
+`build-x86/Testing/Temporary/LastTest.log`. The integration report is
+`validation/integration.json`. These generated files are ignored by Git.
 
-Przed zmianami odtworzono bazowe 12/12 CTest. Po zmianach pełny build
-`build-cpp.ps1 -Test` przeszedł **13/13 CTest**, 19,08 s. Dziewięć aplikacji
-zbudowano i skopiowano do `dist/`.
-
-- Nowy `file_transfer`: 86 kontroli ścieżek, nazw zastrzeżonych Windows,
-  UTF-8 i cytowania argumentów z rzeczywistym parserem Windows.
-- Rozszerzony `terminal`: OSC777, BEL/ST, fragmentacja danych, NUL,
-  przepełnienie, odzyskanie poprawnego parsowania i brak callbacku.
-- `local_ssh_sftp`: 11 kontroli, w tym rekursywny transfer Unicode, literalne
-  nawiasy w nazwach, odmowa junction i brak nowego połączenia TCP po błędnym
-  identyfikatorze lub zamknięciu właściwej sesji. Oryginalny test odrzucenia
-  błędnego klucza hosta zachowano.
-- `crypto`: 90 testów upstream.
-- Osobny helper Bash: 14/14 testów i sprawdzenie składni `bash -n`.
-
-Lokalne logi budowania: `build/baseline-build.log` i
-`build/file-transfer-final.log`; raport integracji: `validation/integration.json`.
-Te pliki są lokalne i ignorowane przez Git.
-
-Nie przeprowadzono ręcznego przeciągania z Eksploratora ani pełnej oceny
-wizualnej okna postępu i konfiguracji. Zsh nie jest zainstalowany na tej maszynie;
-jego ścieżka integracji wymaga sprawdzenia na rzeczywistym serwerze. Podane
-wyniki nie oznaczają wykonania tych kontroli.
+Automated checks do not cover Explorer drag-and-drop interaction, the Duplicate
+Session menu or visual layout during a transfer. Zsh, a separate 32-bit Windows
+installation, physical serial ports, Kerberos/GSSAPI and all remote SSH server
+configurations have not been tested. Process startup checks are not interactive
+GUI tests.

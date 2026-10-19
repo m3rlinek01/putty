@@ -1,124 +1,94 @@
-# PuTTY 0.85 — port C++ dla Windows x64 i x86
+# PuTTY for Windows
 
-Kompletny pakiet aplikacji PuTTY, przygotowany z oficjalnych źródeł wydania 0.85.
-Kod aplikacji kompiluje się jako C++20 przy użyciu LLVM-MinGW Clang. Zachowano
-architekturę proceduralną, algorytmy, zasoby, dokumentację i licencję PuTTY.
-Jest to nieoficjalna kompilacja lokalna; zainstalowany PuTTY pozostał bez zmian.
-Modyfikacje portu C++ i rozszerzenia Windows: **m3rlinek**.
+PuTTY 0.85 compiled as C++20 with LLVM-MinGW, with shell file transfers and
+session duplication over an authenticated SSH connection.
+Maintained by **m3rlinek**. This is an unofficial PuTTY build.
 
-## Start na drugim komputerze
+## Download
 
-Gotowe [wydania](https://github.com/m3rlinek01/putty/releases/latest) zawierają
-instalator EXE i paczkę portable ZIP osobno dla x64 oraz x86.
-Instalator działa na koncie użytkownika, dodaje skróty i deinstalator.
-Portable wystarczy rozpakować i uruchomić `putty.exe`.
+[Releases](https://github.com/m3rlinek01/putty/releases/latest) include installers
+and portable ZIPs for x64 and x86. Use x64 on Windows 10/11 or x86 on Windows 10.
+The x86 build was tested through WOW64 on Windows x64, not on a 32-bit OS.
 
-Zacznij od [instrukcji instalacji](docs/GETTING-STARTED.md).
-Dokumentacja: [rozwój projektu](docs/DEVELOPMENT.md), [mapa kodu](docs/ARCHITECTURE.md)
-i [plan modernizacji](docs/MODERNIZATION.md).
+The installer runs per user and adds Start menu shortcuts and an uninstaller.
+For portable use, extract the ZIP and run `putty.exe`. Keep `pscp.exe` beside it.
+Compiler runtimes are linked statically; no extra compiler DLLs are needed.
+The executables are unsigned.
 
-Repozytorium zawiera źródła i dokumentację. Katalogi `build/`, `dist/`
-i `.venv/` powstają lokalnie podczas przygotowania środowiska.
+Packages contain PuTTY, PuTTYtel, Plink, PSCP, PSFTP, PuTTYgen, Pageant, Pterm
+and Psocks.
 
-## Programy
+## File transfers and sessions
 
-Nowe przesyłanie plików z Eksploratora do aktywnego katalogu SSH i pobieranie
-przez `cp plik "$win"`: [konfiguracja i integracja powłoki](docs/FILE-TRANSFER.md).
-Gotowe pliki i helper powłoki znajdziesz po budowaniu w `dist/`.
-Nowe interaktywne sesje Bash przygotowują integrację automatycznie w pamięci,
-bez instalacji plików na serwerze. Transfer ma natywny pasek postępu.
-**Duplicate Session** otwiera nową powłokę na zalogowanym połączeniu SSH bez
-ponownego hasła: [opis i zachowanie wspólnego połączenia](docs/DUPLICATE-SESSION.md).
+Drag files or folders from Explorer onto PuTTY to upload them to the directory
+reported by the last remote shell prompt. Wait for the prompt after `cd`.
 
-Po zbudowaniu projektu w `dist/` znajdują się:
+To download to Windows:
 
-- `putty.exe` — główny klient z interfejsem graficznym;
-- `puttytel.exe` — klient Telnet;
-- `plink.exe` — klient wiersza poleceń;
-- `pscp.exe` i `psftp.exe` — przesyłanie plików;
-- `puttygen.exe` — generator kluczy;
-- `pageant.exe` — agent kluczy SSH;
-- `pterm.exe` — terminal wykorzystujący Windows ConPTY;
-- `psocks.exe` — dodatkowe narzędzie proxy z drzewa źródłowego PuTTY.
-
-Pliki EXE korzystają z systemowych bibliotek Windows/UCRT. Dla Plink, PSCP i PSFTP
-sprawdzono uruchomienie z samym katalogiem Windows System32 w PATH. Nie mają podpisu
-cyfrowego wydawcy oficjalnego PuTTY.
-
-Biblioteki kompilatora C++ są wbudowane statycznie: instalowanie `libc++.dll`,
-`libunwind.dll` ani środowiska deweloperskiego nie jest potrzebne. Paczkę
-sprawdzono po rozpakowaniu z PATH ograniczonym do Windows System32.
-Wymagany jest Windows 10/11 x64 lub Windows 10 x86. Licencja wbudowanych bibliotek LLVM:
-`THIRD-PARTY-LLVM-LICENSE.txt`.
-
-## Budowanie
-
-Wymagane: Windows 10/11 x64, CMake 3.21+, LLVM-MinGW z `clang`, `clang++`
-i `mingw32-make` dostępnymi w PATH. Zweryfikowano Clang 22.1.8 i CMake 4.4.4.
-
-Z katalogu tego projektu:
-
-```powershell
-.\build-cpp.ps1
+```sh
+cp reports.zip "$win"
+cp -r reports "$win"
 ```
 
-Wariant 32-bitowy: `.\build-cpp.ps1 -Architecture x86 -Test`.
-Powstaje w `build-x86/`, a gotowe pliki trafiają do `dist/x86/`.
-Oba warianty wykorzystują ten sam pakiet LLVM-MinGW z kompilatorami docelowymi
-`x86_64-w64-mingw32-clang++` i `i686-w64-mingw32-clang++`.
-Budowanie instalatorów i paczek opisuje [instrukcja pakowania](docs/PACKAGING.md).
+Downloads go to the Windows Downloads folder unless another folder is set in
+**Connection > SSH > Files**. Each download request requires confirmation in
+Windows. Transfers show a progress bar and can be cancelled.
 
-Programy zostaną zbudowane w `build/` i skopiowane do `dist/`.
-Kompilacja korzysta z rozszerzeń Clang odziedziczonych po kodzie C99, m.in.
-zagnieżdżonych i tablicowych inicjalizatorów. Nie zweryfikowano budowania MSVC/GCC.
-Niektóre miejsca nadal zgłaszają ostrzeżenia zgodności ze ścisłym ISO C++.
-Assercje PuTTY pozostają aktywne także w konfiguracji Release.
+Interactive Bash sessions are prepared automatically when connecting. No helper
+installation or profile edits are needed on the server. The server must support
+SFTP. Transfers use the original SSH user and host, including when the terminal
+has entered `sudo`, `su` or another SSH session.
 
-## Testy
+**Duplicate Session** opens a separate shell over the authenticated SSH
+connection without another password prompt. Keep the original window open;
+closing it disconnects its duplicates.
+
+See [file transfers](docs/FILE-TRANSFER.md) and
+[session duplication](docs/DUPLICATE-SESSION.md) for settings and limitations.
+
+## Build
+
+Use Windows x64, CMake 3.21+ and LLVM-MinGW UCRT. The tested compiler is Clang
+22.1.8 from release `20260616`. Add the toolchain's `bin` directory to PATH.
+The source still uses Clang extensions for C99 initializers; MSVC, GCC and
+Unix/macOS builds have not been verified.
 
 ```powershell
-.\build-cpp.ps1 -Test
+.\build-cpp.ps1 -Architecture x64
+.\build-cpp.ps1 -Architecture x86
 ```
 
-CTest uruchamia 11 zestawów testów natywnych. Jeśli znajdzie Python 3,
-uruchamia również zestaw 90 testów kryptograficznych. Lokalny test SSH/SFTP
-wymaga dodatkowo Paramiko:
+Outputs go to `dist/` and `dist/x86/`. Build directories are `build/` and
+`build-x86/`. See [setup](docs/GETTING-STARTED.md) and
+[packaging](docs/PACKAGING.md) for dependencies and installer builds.
+
+## Tests
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r test\requirements-port.txt
-.\build-cpp.ps1 -Test
+.\build-cpp.ps1 -Architecture x64 -Test
+.\build-cpp.ps1 -Architecture x86 -Test
 ```
 
-Można wskazać własny interpreter przez `-PythonExecutable C:\sciezka\python.exe`.
-Test integracyjny słucha wyłącznie na `127.0.0.1`, używa losowego portu,
-tymczasowego klucza i katalogu. Nie wymaga zewnętrznego serwera ani Twoich danych
-logowania. Sprawdza SSH, przypięcie klucza hosta i transfer SFTP pliku 1 MiB.
+The full CTest run contains 13 suites, including 90 cryptographic tests and a
+local SSH/SFTP integration test. Python is required for the cryptographic suite;
+Paramiko is also required for SSH/SFTP. The integration server listens on
+`127.0.0.1` and uses temporary keys and files.
 
-## Zakres przeniesienia i wynik
+Both architectures passed all 13 suites. Portable and installer checks cover
+system-only PATH startup, package contents, installation, reinstall and
+uninstallation. See [validation](docs/FILE-TRANSFER-VALIDATION.md) for scope and
+untested cases.
 
-W drzewie znajduje się 450 plików `.cpp`. Zweryfikowana kompilacja Windows
-obejmuje 339 unikalnych plików źródłowych i 406 wpisów kompilacji; kod aplikacji
-nie kompiluje żadnego pliku `.c`. CMake zachowuje język C dla testów możliwości
-platformy. Pozostałe źródła dla Unix/macOS i dodatków są dołączone, ale ich
-kompilacji na innych systemach nie sprawdzono.
+## Source and license
 
-Projekt przeszedł **13/13 zestawów CTest**, w tym 90 testów kryptograficznych oraz test
-lokalnego SSH/SFTP. Sprawdzono też start procesów GUI PuTTY, PuTTYtel i PuTTYgen.
-Pełny zakres wyników i ograniczeń znajduje się w [PORT-REPORT.md](PORT-REPORT.md),
-a surowe raporty w `validation/`.
+Based on the [PuTTY 0.85 sources](https://www.chiark.greenend.org.uk/~sgtatham/putty/releases/0.85.html).
+Archive metadata is in [UPSTREAM.json](UPSTREAM.json). The upstream README is
+preserved as [README](README).
 
-Nie przeprowadzono pełnego testu interaktywnego GUI, wszystkich konfiguracji
-serwerów SSH, fizycznego portu szeregowego ani środowisk Kerberos/GSSAPI.
+PuTTY's license is in [LICENCE](LICENCE). The statically linked LLVM runtime
+license is in [THIRD-PARTY-LLVM-LICENSE.txt](THIRD-PARTY-LLVM-LICENSE.txt).
 
-## Źródło i licencja
-
-Oficjalne źródła: https://www.chiark.greenend.org.uk/~sgtatham/putty/releases/0.85.html
-
-Archiwum `putty-src.zip`:
-`232c5c286a5b35f445dbbf49e159469acde372a3907aef738d88e28b4b0f6da2` (SHA-256,
-sprawdzone z opublikowanym plikiem sum). Metadane: `UPSTREAM.json`.
-Oryginalny README zachowano jako `README`, a pełną licencję jako `LICENCE`.
-
-Projekt ma 13 zestawów CTest. Test integracyjny obejmuje także prywatne
-współdzielenie sesji, Unicode, transfer katalogów i odmowę ponownego połączenia.
+Developer notes: [development](docs/DEVELOPMENT.md),
+[code map](docs/ARCHITECTURE.md), [planned work](docs/MODERNIZATION.md).

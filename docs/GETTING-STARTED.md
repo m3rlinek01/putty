@@ -1,12 +1,9 @@
-# Uruchomienie na drugim komputerze
+# Build setup
 
-Zweryfikowana platforma to Windows 10/11 x64. Repozytorium jest prywatne:
-na drugim komputerze zaloguj GitHub CLI na konto mające do niego dostęp.
-Nie kopiuj tokenów ani plików logowania z pierwszego komputera do repozytorium.
+Use Windows x64 to build both target architectures. For prebuilt installers and
+portable packages, use [Releases](https://github.com/m3rlinek01/putty/releases/latest).
 
-## 1. Git, GitHub CLI, CMake i Python
-
-Jeśli narzędzi brakuje, w PowerShell:
+Install Git, GitHub CLI, CMake and Python if needed:
 
 ```powershell
 winget install --exact --id Git.Git
@@ -15,31 +12,31 @@ winget install --exact --id Kitware.CMake
 winget install --exact --id Python.Python.3.13
 ```
 
-Po instalacji otwórz nowy PowerShell. Potwierdź `git --version`, `gh --version`,
-`cmake --version` i `py -3.13 --version`.
+Open a new PowerShell after installation and check `git --version`,
+`gh --version`, `cmake --version` and `py -3.13 --version`.
 
-## 2. Kompilator LLVM-MinGW
+## Compiler
 
-Użyj zestawu UCRT x86_64 z LLVM-MinGW, a nie samego `clang-cl` z Visual Studio.
-Dokładnie zweryfikowane wydanie opisano w [TOOLCHAIN.md](TOOLCHAIN.md).
+Download and extract the tested
+[LLVM-MinGW UCRT package](https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-x86_64.zip).
+See [TOOLCHAIN.md](TOOLCHAIN.md) for its checksum. Use LLVM-MinGW rather than
+Visual Studio's `clang-cl`.
 
-Pobierz i rozpakuj:
-[llvm-mingw-20260616-ucrt-x86_64.zip](https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-x86_64.zip).
-Dodaj jego katalog `bin` do PATH w bieżącej sesji, np.:
+Add the extracted `bin` directory to PATH, adjusting the example path:
 
 ```powershell
-# Dopasuj tę ścieżkę do miejsca rozpakowania na swoim komputerze.
 $env:PATH = 'C:\Tools\llvm-mingw-20260616-ucrt-x86_64\bin;' + $env:PATH
-clang++ --version
-clang++ -dumpmachine
+x86_64-w64-mingw32-clang++ --version
+i686-w64-mingw32-clang++ --version
 mingw32-make --version
 ```
 
-Oczekiwany target to `x86_64-w64-windows-gnu`. Nowszy pakiet WinGet
-`MartinStorsjo.LLVM-MinGW.UCRT` można sprawdzić osobno; nie jest on identyczny
-z przypiętym, przetestowanym wydaniem 22.1.8.
+Both target compilers are included in the same package.
 
-## 3. Klonowanie i środowisko testowe
+## Build and test
+
+Authenticate with an account that has repository access. Skip `gh auth login`
+if already authenticated.
 
 ```powershell
 gh auth login
@@ -47,38 +44,29 @@ gh repo clone m3rlinek01/putty
 Set-Location putty
 py -3.13 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r test\requirements-port.txt
-.\build-cpp.ps1 -Test
+.\build-cpp.ps1 -Architecture x64 -Test
+.\build-cpp.ps1 -Architecture x86 -Test
 ```
 
-Jeśli masz już działające logowanie GitHub, krok `gh auth login` można pominąć.
-Jeśli `py` nie jest dostępny, użyj pełnej ścieżki do zainstalowanego Pythona 3.
-Projekt buduje się samodzielnie z dołączonych źródeł.
+The script selects the project's `.venv\Scripts\python.exe`. To use another
+interpreter, pass `-PythonExecutable C:\Path\python.exe`.
 
-Skrypt wybiera `.venv\Scripts\python.exe` z katalogu projektu. Możesz wskazać
-inny interpreter przez `-PythonExecutable C:\sciezka\python.exe`.
+A full run has 13 CTest suites per architecture. The `crypto` suite contains
+90 tests; `local_ssh_sftp` runs 13 checks against a temporary local server.
+No external SSH credentials are needed.
 
-## 4. Potwierdzenie wyniku
+Run `dist\putty.exe` for x64 or `dist\x86\putty.exe` for x86. Build caches are
+in `build/` and `build-x86/`. See [PACKAGING.md](PACKAGING.md) to make installers
+and portable ZIPs.
 
-```powershell
-ctest --test-dir build -N
-ctest --test-dir build --output-on-failure
-.\dist\plink.exe -V
-```
+## Troubleshooting
 
-Oczekiwany wynik: **13 testów CTest i 13/13 PASS**. Zestaw `crypto` zawiera
-90 testów kryptograficznych, a `local_ssh_sftp` 13 kontroli klientów.
-
-Programy EXE znajdziesz w `dist/`. Główny klient to `dist\putty.exe`.
-Oryginalna aplikacja zainstalowana w systemie jest niezależna od tego katalogu.
-
-## Typowe problemy
-
-- **11 zamiast 13 testów:** CMake nie znalazł Pythona.
-- **12 zamiast 13:** wybrany Python nie ma Paramiko. Zainstaluj wymagania
-  wskazanym interpreterem i ponownie uruchom `build-cpp.ps1 -Test`.
-- **Wybrany niewłaściwy Clang:** sprawdź `Get-Command clang, clang++, mingw32-make`.
-  Wszystkie powinny pochodzić z LLVM-MinGW. Umieść jego `bin` na początku PATH.
-- **Błąd CMake po przeniesieniu katalogu:** skonfiguruj nowy katalog budowania;
-  cache zawiera ścieżki absolutne i nie powinien być przenoszony między komputerami.
-- **Brak `pterm.exe`:** sprawdź wynik wykrywania ConPTY i właściwy Windows toolchain;
-  zweryfikowana konfiguracja buduje również Pterm.
+- **11 tests:** CMake did not find Python.
+- **12 tests:** the selected Python lacks Paramiko. Install the requirements
+  with that interpreter and run the build script again.
+- **Wrong compiler:** check `Get-Command x86_64-w64-mingw32-clang++, i686-w64-mingw32-clang++, mingw32-make`.
+  Put the LLVM-MinGW `bin` directory first in PATH.
+- **CMake errors after moving the repository:** configure a fresh build
+  directory. Caches contain absolute paths and cannot be moved between machines.
+- **Missing `pterm.exe`:** check ConPTY detection and the Windows toolchain.
+  The tested configuration builds Pterm.

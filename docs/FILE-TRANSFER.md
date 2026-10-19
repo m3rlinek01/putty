@@ -1,112 +1,93 @@
-# Przesyłanie plików między Windows a powłoką SSH
+# Shell file transfers
 
-Ta funkcja wymaga zmodyfikowanego `putty.exe` i dołączonego `pscp.exe` oraz
-serwera udostępniającego SFTP. Bash jest przygotowywany automatycznie przy
-nowym połączeniu; nie trzeba kopiować plików na Linux ani wykonywać `source`.
+Requires this build's `putty.exe`, the bundled `pscp.exe` beside it, and an SSH
+server with SFTP support. Transfer settings are under **Connection > SSH > Files**.
+Transfers and automatic Bash setup are enabled by default. An empty download
+path selects the Windows Downloads folder. Reconnect after changing settings.
 
-## Automatyczne przygotowanie powłoki
+## Usage
 
-Uruchom nową wersję PuTTY i połącz się ponownie z serwerem. Przy domyślnych
-ustawieniach `cp plik "$win"` i przeciąganie plików działają już w pierwszej
-powłoce Bash. Integracja jest wbudowana w EXE i przekazywana przy starcie SSH
-przez strumień `/dev/fd/3`. Działa w pamięci tej powłoki. PuTTY nie zapisuje
-helpera ani nie zmienia `.bashrc`/`.profile` na serwerze.
+After the shell prompt appears, drag files or folders from Explorer onto PuTTY.
+The upload target is the directory reported by the last prompt. After `cd`,
+wait for the next prompt before dropping files. Avoid dropping while a command
+or full-screen program is running.
 
-Standardowe profile logowania Bash są odczytywane przed dodaniem integracji.
-Ustawiany jest `$win`, raportowanie katalogu i funkcja `cp`; istniejące hooki
-promptu pozostają zachowane. Normalna historia Bash działa tak jak dotychczas.
-Wcześniej ręcznie dodany `source` można usunąć ze swoich plików startowych,
-ale ponowne załadowanie integracji nie dubluje hooków.
-
-Automatyczny start dotyczy interaktywnych sesji z Bash jako `$SHELL`, bez
-własnego polecenia zdalnego, subsystemu i bez wyłączonego PTY. Dla innych
-powłok uruchamiana jest zwykła powłoka z informacją, że automatyczna integracja
-wymaga Bash. Stary helper nadal jest dostępny jako opcjonalne narzędzie dla
-Zsh i konfiguracji niestandardowych; nie jest wymagany w zwykłej sesji Bash.
-
-W ustawieniach PuTTY przejdź do **Connection → SSH → Files**. Funkcja jest
-domyślnie włączona; pusty katalog pobierania oznacza systemowy folder Pobrane.
-Możesz ją wyłączyć dla danej zapisanej sesji albo wybrać własny katalog.
-Osobna opcja **Prepare Bash automatically** pozwala wyłączyć automatyczne
-przygotowanie, np. dla serwera z ograniczonymi poleceniami SSH.
-Włączenie funkcji tworzy prywatne współdzielenie połączenia SSH, przez które
-dołączony `pscp.exe` przesyła pliki bez ponownego wpisywania hasła. Zastępuje
-to zwykłe ustawienia współdzielenia połączenia w tej sesji GUI. Po zmianie
-ustawień trzeba ponownie połączyć sesję.
-Zalogowane okno można duplikować bez ponownego hasła; szczegóły dotyczące
-osobnej powłoki i czasu życia wspólnego połączenia są w `DUPLICATE-SESSION.md`.
-
-## Użycie
-
-Po pojawieniu się promptu przeciągnij pliki lub foldery z Eksploratora Windows
-na okno PuTTY. Celem jest katalog zgłoszony przez ostatni prompt powłoki.
-Poczekaj na prompt po `cd`; nie upuszczaj plików podczas wykonywania poleceń
-lub działania programu pełnoekranowego.
-
-Pobranie pliku i katalogu z serwera:
+Download files and directories with:
 
 ```sh
-cp aaa.zip "$win"
-cp "plik ze spacjami.zip" "$win"
-cp -r katalog "$win"
-cp -r katalog/ "$win"
+cp reports.zip "$win"
+cp "file with spaces.zip" "$win"
+cp -r reports "$win"
+cp -r reports/ "$win"
 cp -r . "$win"
-cp jeden.zip drugi.zip "$win"
-cp -- -nazwa-z-myslnikiem.zip "$win"
+cp first.zip second.zip "$win"
+cp -- -leading-dash.zip "$win"
 ```
 
-Funkcja obsługuje specjalny cel `$win` oraz opcje `-r`, `-R`, `-i` i `--`. Opcja
-`-i` odpowiada obowiązkowemu potwierdzeniu pobrania w Windows, dzięki czemu
-działa również typowy alias `cp='cp -i'`. Pozostałe
-wywołania `cp` wykonują zwykły systemowy program. `command cp` zawsze omija
-funkcję. Nie zastępuj `$win` prawdziwym katalogiem na serwerze.
+The shell function handles `$win` with `-r`, `-R`, `-i` and `--`. The `-i`
+option uses the required Windows confirmation, so an alias such as `cp='cp -i'`
+also works. Other destinations use the system `cp`; `command cp` always bypasses
+the function. Do not set `$win` to a real directory on the server.
 
-Kod wyjścia funkcji potwierdza zgłoszenie żądania. Właściwy wynik przesyłania
-pokazuje Windows; operacja jest asynchroniczna. Domyślny katalog docelowy to
-systemowy folder Pobrane (Downloads); można wybrać własny katalog w opcjach
-PuTTY. Żądanie pochodzące z terminala wymaga lokalnego potwierdzenia, domyślnie
-z wybraną odpowiedzią „Nie”. Jedno polecenie może zgłosić maksymalnie 16 źródeł.
+Downloads require confirmation in Windows, with No selected by default. A
+command can request up to 16 sources. The shell return code reports submission
+of the request; the transfer result appears in Windows because transfers are
+asynchronous.
 
-Pobieranie nie nadpisuje istniejących elementów: w razie kolizji dobierany jest
-wolny sufiks nazwy. Dane najpierw trafiają do tymczasowego katalogu
-`.putty-transfer-*`, a po sukcesie otrzymują nazwę docelową. Anulowanie albo
-błąd może pozostawić taki katalog z niekompletnym transferem; można go usunąć
-po zamknięciu operacji.
+Existing local files are not overwritten. Name conflicts get an unused suffix.
+Downloads are staged in a `.putty-transfer-*` directory and renamed on success.
+A failed or cancelled download can leave a partial staging directory; remove it
+after the operation has closed.
 
-## Zakres i ograniczenia
+The transfer window shows the current file, percentage, MiB transferred, speed
+and ETA. For directories, progress describes the current file rather than the
+whole tree. Cancel stops the transfer. Text details are shown after a failure.
 
-Okno transferu pokazuje natywny pasek postępu, nazwę bieżącego pliku,
-procent, przesłane MiB, prędkość i pozostały czas. Dla folderów są to dane
-bieżącego pliku, nie całego drzewa. Przycisk Cancel przerywa transfer.
-Szczegóły tekstowe są dostępne po błędzie, zamiast zastępować pasek postępu.
+## Bash setup
 
-- Bieżący katalog pochodzi z ostatniego promptu; PuTTY nie odczytuje ekranu ani
-  nie zgaduje ścieżki z tekstu promptu.
-- Transfer używa użytkownika i hosta pierwotnej sesji SSH. Nie przejmuje
-  uprawnień `sudo`/`su` ani połączenia otwartego poleceniem `ssh` wewnątrz sesji.
-  Używaj integracji w powłoce zalogowanego użytkownika na pierwotnym serwerze.
-- `tmux` i `screen` mogą filtrować sekwencje sterujące; przekazywanie ich nie
-  jest automatycznie konfigurowane przez ten helper.
-- Nazwy plików mogą zawierać spacje i znaki Unicode; ścieżki kodowane są jako
-  bajty UTF-8 w zapisie szesnastkowym. Lokalny moduł transferu odrzuca ścieżki
-  niewłaściwe dla Windows. Protokół dopuszcza maksymalnie 950 bajtów ścieżki.
-- Helper nie obsługuje dowiązań symbolicznych jako źródeł pobierania ani
-  zaawansowanych opcji `cp` przy specjalnym celu `$win`. Katalogi, w tym `.`
-  i `..`, są zamieniane na fizyczną ścieżkę absolutną; katalog główny `/` jest
-  odrzucany. Ścieżki ze znakami sterującymi również są odrzucane. Nieprawidłowy
-  raport katalogu czyści poprzedni cel, aby przeciągnięcie nie trafiło do
-  wcześniej odwiedzonego katalogu.
+New interactive sessions prepare Bash through the SSH startup stream using
+`/dev/fd/3`. The integration runs in shell memory without saving a helper or
+editing `.bashrc` or `.profile`. Login profiles are read first, then `$win`, the
+`cp` function and directory reporting are added. Existing prompt hooks are
+preserved. Loading the integration again does not duplicate its hooks.
 
-## Protokół integracji
+Automatic setup requires Bash as the user's `$SHELL`, an interactive PTY and no
+custom remote command or subsystem. Other shells start normally with a notice
+that automatic integration requires Bash. **Prepare Bash automatically** can be
+disabled for restricted servers. The optional `contrib/putty-transfer.sh` helper
+remains available for custom setups and Zsh; Zsh support has not been tested.
 
-Helper emituje `OSC 777`, z terminatorem BEL albo ST:
+Transfers use a private SSH connection-sharing endpoint so PSCP can use the
+current authenticated connection. This overrides ordinary sharing settings for
+that GUI session. See [Duplicate Session](DUPLICATE-SESSION.md) for connection
+lifetime and duplicate windows.
+
+## Limits
+
+- Directory reporting comes from the last prompt, not from screen text.
+- Transfers use the original SSH user and host. They do not inherit `sudo`,
+  `su` or an SSH connection opened inside the shell.
+- `tmux` and `screen` may filter the control sequences. The helper does not
+  configure passthrough for them.
+- Paths support spaces and Unicode. The protocol allows at most 950 path bytes;
+  paths unsuitable for Windows are rejected locally.
+- Symbolic links cannot be download sources. Other advanced `cp` options are
+  not supported for `$win`.
+- Directories, including `.` and `..`, are resolved to physical absolute paths.
+  The root directory `/` and paths containing control characters are rejected.
+  An invalid directory report clears the previous upload target.
+
+## Protocol
+
+The helper sends `OSC 777` terminated by BEL or ST:
 
 ```text
-ESC ] 777 ; putty-transfer;cwd;<hex ścieżki absolutnej> BEL
-ESC ] 777 ; putty-transfer;download;<hex ścieżki absolutnej> BEL
+ESC ] 777 ; putty-transfer;cwd;<hex absolute path> BEL
+ESC ] 777 ; putty-transfer;download;<hex absolute path> BEL
 ```
 
-Terminal przekazuje wyłącznie kompletne sekwencje, bez NUL i bez przepełnienia
-bufora, do opcjonalnego callbacku frontendu Windows. Inne frontendy ignorują
-ten protokół. Dane z serwera są niezaufane: callback sprawdza sesję SSH,
-strukturę komunikatu i ścieżki, a pobieranie wymaga potwierdzenia na Windows.
+Paths are UTF-8 bytes encoded as hexadecimal. The terminal forwards only complete,
+bounded sequences without NUL bytes to the Windows frontend callback. Other
+frontends ignore the protocol. The callback validates the SSH session, message
+structure and paths. Remote output is untrusted, so downloads still require
+local confirmation.
